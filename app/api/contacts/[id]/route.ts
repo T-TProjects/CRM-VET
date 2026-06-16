@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/api'
 
 const EDITABLE = [
   'name', 'organization', 'email', 'phone', 'status',
-  'dietary_needs', 'accommodation_notes', 'notes', 'last_contact_date',
+  'dietary_needs', 'accommodation_notes', 'groups', 'notes', 'last_contact_date',
 ] as const
 
 // PATCH /api/contacts/:id — update a contact

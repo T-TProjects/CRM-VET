@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/api'
 
-const EDITABLE = ['name', 'description', 'location', 'starts_at', 'ends_at', 'agenda_url', 'status'] as const
+const EDITABLE = ['name', 'description', 'location', 'starts_at', 'ends_at', 'agenda_url', 'status', 'key_contact_id'] as const
 
 // GET /api/events/:id — event + its registrations (with contacts)
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

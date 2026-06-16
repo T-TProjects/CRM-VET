@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       ends_at: body.ends_at || null,
       agenda_url: body.agenda_url || null,
       status: body.status || 'draft',
+      key_contact_id: body.key_contact_id || null,
       created_by: user.id,
     })
     .select('*')
