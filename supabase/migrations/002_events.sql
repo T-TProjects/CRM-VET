@@ -50,18 +50,23 @@ CREATE INDEX IF NOT EXISTS registrations_status_idx  ON public.registrations(sta
 COMMENT ON TABLE public.registrations IS 'A contact signed up to an event, with per-event needs and response tracking';
 
 -- Now that events/registrations exist, wire the deferred foreign keys.
+-- DROP ... IF EXISTS first so this migration is safe to re-run.
+ALTER TABLE public.interactions DROP CONSTRAINT IF EXISTS interactions_event_fk;
 ALTER TABLE public.interactions
   ADD CONSTRAINT interactions_event_fk
   FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE SET NULL;
 
+ALTER TABLE public.reminders DROP CONSTRAINT IF EXISTS reminders_event_fk;
 ALTER TABLE public.reminders
   ADD CONSTRAINT reminders_event_fk
   FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE SET NULL;
 
+ALTER TABLE public.emails DROP CONSTRAINT IF EXISTS emails_event_fk;
 ALTER TABLE public.emails
   ADD CONSTRAINT emails_event_fk
   FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE SET NULL;
 
+ALTER TABLE public.emails DROP CONSTRAINT IF EXISTS emails_registration_fk;
 ALTER TABLE public.emails
   ADD CONSTRAINT emails_registration_fk
   FOREIGN KEY (registration_id) REFERENCES public.registrations(id) ON DELETE SET NULL;

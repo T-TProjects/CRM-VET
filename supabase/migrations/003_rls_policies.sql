@@ -19,6 +19,8 @@ ALTER TABLE public.email_templates  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gmail_tokens     ENABLE ROW LEVEL SECURITY;
 
 -- Users: a user can read their own profile.
+-- DROP ... IF EXISTS first so this migration is safe to re-run.
+DROP POLICY IF EXISTS "users read own profile" ON public.users;
 CREATE POLICY "users read own profile" ON public.users
   FOR SELECT TO authenticated
   USING (id = auth.uid());
@@ -32,6 +34,7 @@ BEGIN
     'events', 'registrations', 'emails', 'email_templates'
   ]
   LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "authenticated full access" ON public.%I;', t);
     EXECUTE format(
       'CREATE POLICY "authenticated full access" ON public.%I
          FOR ALL TO authenticated USING (true) WITH CHECK (true);', t
