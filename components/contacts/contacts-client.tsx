@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Plus, Search, Pencil, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,6 +35,10 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
   const [editing, setEditing] = useState<Contact | null>(null)
   const [form, setForm] = useState(empty)
   const [saving, setSaving] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importing, setImporting] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   const filtered = useMemo(() => {
@@ -99,6 +103,42 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
     toast({ title: 'Contact deleted' })
   }
 
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setImportText(String(reader.result ?? ''))
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  async function runImport() {
+    const drafts = parseContacts(importText)
+    if (drafts.length === 0) {
+      toast({ title: 'Nothing to import', description: 'Each row needs at least a name.', variant: 'destructive' })
+      return
+    }
+    setImporting(true)
+    const res = await fetch('/api/contacts/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contacts: drafts }),
+    })
+    const json = await res.json()
+    setImporting(false)
+    if (!res.ok) {
+      toast({ title: 'Import failed', description: json.error, variant: 'destructive' })
+      return
+    }
+    const added = json.contacts as Contact[]
+    setContacts(prev => [...prev, ...added].sort((a, b) => a.name.localeCompare(b.name)))
+    setImportOpen(false)
+    setImportText('')
+    toast({ title: `Imported ${json.inserted} contact${json.inserted === 1 ? '' : 's'}` })
+  }
+
+  const importCount = parseContacts(importText).length
+
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between gap-4">
@@ -106,7 +146,10 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
           <h1 className="text-2xl font-semibold">Contacts</h1>
           <p className="text-sm text-muted-foreground">{contacts.length} people</p>
         </div>
-        <Button onClick={openNew}><Plus className="h-4 w-4 mr-1.5" /> Add contact</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-1.5" /> Import</Button>
+          <Button onClick={openNew}><Plus className="h-4 w-4 mr-1.5" /> Add contact</Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">
@@ -180,6 +223,35 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Import contacts</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Paste rows or upload a CSV. Columns:{' '}
+              <span className="font-medium text-foreground">Name, Email, Organization, Phone</span> (Name required). A header row is optional.
+            </p>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-1.5" /> Upload CSV file
+            </Button>
+            <textarea
+              value={importText}
+              onChange={e => setImportText(e.target.value)}
+              placeholder={'Name,Email,Organization,Phone\nJane Doe,jane@example.com,Acme,0400 000 000'}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[180px] font-mono"
+            />
+            <p className="text-xs text-muted-foreground">{importCount} contact{importCount === 1 ? '' : 's'} detected.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+            <Button onClick={runImport} disabled={importing || importCount === 0}>
+              {importing ? 'Importing…' : 'Import'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -191,4 +263,69 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   )
+}
+
+// ─── CSV import parsing ──────────────────────────────────────
+type ContactDraft = {
+  name: string
+  email?: string
+  organization?: string
+  phone?: string
+  status?: string
+}
+
+const HEADER_ALIASES: Record<string, keyof ContactDraft> = {
+  name: 'name', 'full name': 'name', contact: 'name',
+  email: 'email', 'e-mail': 'email',
+  organization: 'organization', organisation: 'organization', org: 'organization', company: 'organization',
+  phone: 'phone', mobile: 'phone', 'phone number': 'phone', tel: 'phone',
+  status: 'status',
+}
+
+// Split one CSV line, honouring "quoted, fields" and "" escapes.
+function splitCsvLine(line: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++ }
+      else if (ch === '"') quoted = false
+      else cur += ch
+    } else if (ch === '"') {
+      quoted = true
+    } else if (ch === ',') {
+      out.push(cur); cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  out.push(cur)
+  return out.map(s => s.trim())
+}
+
+// Turn pasted/CSV text into contact drafts. Uses a header row if present,
+// otherwise assumes Name, Email, Organization, Phone order. Rows without a name are dropped.
+function parseContacts(text: string): ContactDraft[] {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  if (lines.length === 0) return []
+
+  const firstCells = splitCsvLine(lines[0]).map(c => c.toLowerCase())
+  const hasHeader = firstCells.some(c => HEADER_ALIASES[c])
+  const cols: (keyof ContactDraft | null)[] = hasHeader
+    ? firstCells.map(c => HEADER_ALIASES[c] ?? null)
+    : ['name', 'email', 'organization', 'phone']
+  const dataLines = hasHeader ? lines.slice(1) : lines
+
+  const drafts: ContactDraft[] = []
+  for (const line of dataLines) {
+    const cells = splitCsvLine(line)
+    const draft: ContactDraft = { name: '' }
+    cols.forEach((key, i) => {
+      if (key && cells[i]) (draft as Record<string, string>)[key] = cells[i]
+    })
+    if (draft.name) drafts.push(draft)
+  }
+  return drafts
 }
