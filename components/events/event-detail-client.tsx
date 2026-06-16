@@ -545,7 +545,7 @@ function EditRegistrationDialog({
             <div className="space-y-1.5"><Label>Departure</Label><Input type="date" value={departure} onChange={e => setDeparture(e.target.value)} /></div>
           </div>
           <div className="space-y-1.5"><Label>Dietary needs</Label><Input value={dietary} onChange={e => setDietary(e.target.value)} placeholder="e.g. vegetarian, gluten free" /></div>
-          <div className="space-y-1.5"><Label>Response notes</Label><textarea value={responseNotes} onChange={e => setResponseNotes(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" /></div>
+          <div className="space-y-1.5"><Label>Notes</Label><textarea value={responseNotes} onChange={e => setResponseNotes(e.target.value)} placeholder="Notes about this person for this event" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" /></div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={replied} onChange={e => setReplied(e.target.checked)} className="h-4 w-4" />
             Mark as replied
