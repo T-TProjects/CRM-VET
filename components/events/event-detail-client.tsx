@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, CalendarDays, MapPin, FileText, Plus, Send, Trash2,
-  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search,
+  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +38,8 @@ export function EventDetailClient({
   const [ev, setEv] = useState(event)
   const [editOpen, setEditOpen] = useState(false)
   const [attendeeSearch, setAttendeeSearch] = useState('')
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkText, setBulkText] = useState('')
   const { toast } = useToast()
 
   const summary = useMemo(() => {
@@ -139,6 +141,28 @@ export function EventDetailClient({
     return true
   }
 
+  async function bulkAddAttendees(people: { name: string; email: string }[]) {
+    if (people.length === 0) return
+    setBusy(true)
+    const res = await fetch(`/api/events/${ev.id}/attendees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ people }),
+    })
+    const json = await res.json()
+    setBusy(false)
+    if (!res.ok) {
+      toast({ title: 'Could not add', description: json.error, variant: 'destructive' })
+      return
+    }
+    const added = (json.registrations ?? []) as Registration[]
+    setRegs(prev => [...prev, ...added])
+    setBulkOpen(false)
+    setBulkText('')
+    toast({ title: `Added ${json.added} attendee${json.added === 1 ? '' : 's'}` })
+  }
+
+  const keyContact = allContacts.find(c => c.id === ev.key_contact_id) ?? null
   const invitedIds = regs.filter(r => r.status === 'invited').map(r => r.id)
   const signedUpIds = regs.filter(r => r.status === 'signed_up').map(r => r.id)
   const noReplyIds = regs.filter(r => r.notified_at && !r.replied_at).map(r => r.id)
@@ -162,6 +186,7 @@ export function EventDetailClient({
             )}
             {ev.location && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {ev.location}</span>}
             {ev.agenda_url && <a href={ev.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-foreground hover:underline"><FileText className="h-4 w-4" /> Agenda</a>}
+            {keyContact && <span className="flex items-center gap-1.5"><Star className="h-4 w-4" /> Key contact: {keyContact.name}</span>}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -181,6 +206,7 @@ export function EventDetailClient({
       {/* Bulk actions */}
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => { setAttendeeSearch(''); setAddOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add attendee</Button>
+        <Button variant="outline" onClick={() => { setBulkText(''); setBulkOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add multiple</Button>
         <Button variant="outline" disabled={busy || invitedIds.length === 0} onClick={() => notify('event_invite', invitedIds)}>
           <Send className="h-4 w-4 mr-1.5" /> Send invite to no-response ({invitedIds.length})
         </Button>
@@ -227,7 +253,16 @@ export function EventDetailClient({
                     </Select>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {r.accommodation_needed ? <span className="flex items-center gap-1.5 text-foreground"><Bed className="h-3.5 w-3.5" /> {r.accommodation_notes || 'Needed'}</span> : '—'}
+                    {r.accommodation_needed ? (
+                      <span className="text-foreground">
+                        <span className="flex items-center gap-1.5"><Bed className="h-3.5 w-3.5" /> {r.accommodation_notes || 'Needed'}</span>
+                        {(r.arrival_date || r.departure_date) && (
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {r.arrival_date ? formatDate(r.arrival_date) : '?'} → {r.departure_date ? formatDate(r.departure_date) : '?'}
+                          </span>
+                        )}
+                      </span>
+                    ) : '—'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {r.dietary_needs ? <span className="flex items-center gap-1.5 text-foreground"><Utensils className="h-3.5 w-3.5" /> {r.dietary_needs}</span> : '—'}
@@ -281,6 +316,31 @@ export function EventDetailClient({
         </DialogContent>
       </Dialog>
 
+      {/* Add multiple attendees dialog */}
+      <Dialog open={bulkOpen} onOpenChange={(o) => { setBulkOpen(o); if (!o) setBulkText('') }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add multiple attendees</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Paste the list the key contact gave you, one per line. Each line can be a name, an email, or &ldquo;Name, email&rdquo;. New people are added to your contacts automatically.
+            </p>
+            <textarea
+              value={bulkText}
+              onChange={e => setBulkText(e.target.value)}
+              placeholder={'Jane Doe, jane@acme.com\nJohn Smith <john@globex.com>\nmary@initech.com'}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[160px] font-mono"
+            />
+            <p className="text-xs text-muted-foreground">{parseAttendees(bulkText).length} attendee(s) detected.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)}>Cancel</Button>
+            <Button onClick={() => bulkAddAttendees(parseAttendees(bulkText))} disabled={busy || parseAttendees(bulkText).length === 0}>
+              {busy ? 'Adding…' : 'Add attendees'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit registration dialog */}
       {editing && (
         <EditRegistrationDialog
@@ -292,15 +352,15 @@ export function EventDetailClient({
 
       {/* Edit conference dialog */}
       {editOpen && (
-        <EditEventDialog event={ev} onClose={() => setEditOpen(false)} onSave={updateEvent} />
+        <EditEventDialog event={ev} contacts={allContacts} onClose={() => setEditOpen(false)} onSave={updateEvent} />
       )}
     </div>
   )
 }
 
 function EditEventDialog({
-  event, onClose, onSave,
-}: { event: Event; onClose: () => void; onSave: (body: Partial<Event>) => Promise<boolean> }) {
+  event, contacts, onClose, onSave,
+}: { event: Event; contacts: Contact[]; onClose: () => void; onSave: (body: Partial<Event>) => Promise<boolean> }) {
   const toDate = (iso: string | null) => (iso ? iso.slice(0, 10) : '')
   const [form, setForm] = useState({
     name: event.name,
@@ -309,6 +369,7 @@ function EditEventDialog({
     ends_at: toDate(event.ends_at),
     agenda_url: event.agenda_url ?? '',
     status: event.status,
+    key_contact_id: event.key_contact_id ?? '',
     description: event.description ?? '',
   })
   const [saving, setSaving] = useState(false)
@@ -323,6 +384,7 @@ function EditEventDialog({
       ends_at: form.ends_at || null,
       agenda_url: form.agenda_url || null,
       status: form.status,
+      key_contact_id: form.key_contact_id || null,
       description: form.description || null,
     })
     setSaving(false)
@@ -354,6 +416,16 @@ function EditEventDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1.5">
+            <Label>Key contact (optional)</Label>
+            <Select value={form.key_contact_id || 'none'} onValueChange={v => setForm({ ...form, key_contact_id: v === 'none' ? '' : v })}>
+              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {contacts.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.organization ? ` · ${c.organization}` : ''}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5"><Label>Description</Label><textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[72px]" /></div>
         </div>
         <DialogFooter>
@@ -363,6 +435,21 @@ function EditEventDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+// Parse a pasted attendee list: one per line, each a name, an email, or "Name, email".
+function parseAttendees(text: string): { name: string; email: string }[] {
+  return text
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(line => {
+      const email = line.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0] ?? ''
+      let name = line.replace(email, '').replace(/[<>,;]+/g, ' ').trim()
+      if (!name) name = email
+      return { name, email }
+    })
+    .filter(p => p.name || p.email)
 }
 
 function Stat({ label, value, icon: Icon }: { label: string; value: number; icon: React.ElementType }) {
@@ -382,6 +469,8 @@ function EditRegistrationDialog({
 }: { reg: Registration; onClose: () => void; onSave: (body: Partial<Registration>) => Promise<void> }) {
   const [accNeeded, setAccNeeded] = useState(reg.accommodation_needed)
   const [accNotes, setAccNotes] = useState(reg.accommodation_notes ?? '')
+  const [arrival, setArrival] = useState(reg.arrival_date ?? '')
+  const [departure, setDeparture] = useState(reg.departure_date ?? '')
   const [dietary, setDietary] = useState(reg.dietary_needs ?? '')
   const [responseNotes, setResponseNotes] = useState(reg.response_notes ?? '')
   const [replied, setReplied] = useState(!!reg.replied_at)
@@ -392,6 +481,8 @@ function EditRegistrationDialog({
     await onSave({
       accommodation_needed: accNeeded,
       accommodation_notes: accNotes || null,
+      arrival_date: arrival || null,
+      departure_date: departure || null,
       dietary_needs: dietary || null,
       response_notes: responseNotes || null,
       replied_at: replied ? (reg.replied_at ?? new Date().toISOString()) : null,
@@ -409,6 +500,10 @@ function EditRegistrationDialog({
             Needs accommodation
           </label>
           <div className="space-y-1.5"><Label>Accommodation notes</Label><Input value={accNotes} onChange={e => setAccNotes(e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Arrival</Label><Input type="date" value={arrival} onChange={e => setArrival(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Departure</Label><Input type="date" value={departure} onChange={e => setDeparture(e.target.value)} /></div>
+          </div>
           <div className="space-y-1.5"><Label>Dietary needs</Label><Input value={dietary} onChange={e => setDietary(e.target.value)} placeholder="e.g. vegetarian, gluten free" /></div>
           <div className="space-y-1.5"><Label>Response notes</Label><textarea value={responseNotes} onChange={e => setResponseNotes(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" /></div>
           <label className="flex items-center gap-2 text-sm">
