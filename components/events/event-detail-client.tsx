@@ -59,9 +59,15 @@ export function EventDetailClient({
     const q = attendeeSearch.toLowerCase().trim()
     if (!q) return unregistered
     return unregistered.filter(c =>
-      [c.name, c.organization, c.email].filter(Boolean).some(v => v!.toLowerCase().includes(q))
+      [c.name, c.organization, c.email, ...(c.groups ?? [])].filter(Boolean).some(v => v!.toLowerCase().includes(q))
     )
   }, [unregistered, attendeeSearch])
+
+  const allGroups = useMemo(() => {
+    const set = new Set<string>()
+    allContacts.forEach(c => (c.groups ?? []).forEach(g => set.add(g)))
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [allContacts])
 
   function patchLocal(updated: Registration) {
     setRegs(prev => prev.map(r => (r.id === updated.id ? { ...r, ...updated, contact: r.contact } : r)))
@@ -162,6 +168,24 @@ export function EventDetailClient({
     toast({ title: `Added ${json.added} attendee${json.added === 1 ? '' : 's'}` })
   }
 
+  async function addGroup(group: string) {
+    const ids = unregistered.filter(c => (c.groups ?? []).includes(group)).map(c => c.id)
+    if (ids.length === 0) { toast({ title: `No new contacts in "${group}"` }); return }
+    setBusy(true)
+    const res = await fetch(`/api/events/${ev.id}/attendees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactIds: ids }),
+    })
+    const json = await res.json()
+    setBusy(false)
+    if (!res.ok) { toast({ title: 'Could not add group', description: json.error, variant: 'destructive' }); return }
+    const added = (json.registrations ?? []) as Registration[]
+    setRegs(prev => [...prev, ...added])
+    setAddOpen(false)
+    toast({ title: `Added ${json.added} from "${group}"` })
+  }
+
   const keyContact = allContacts.find(c => c.id === ev.key_contact_id) ?? null
   const invitedIds = regs.filter(r => r.status === 'invited').map(r => r.id)
   const signedUpIds = regs.filter(r => r.status === 'signed_up').map(r => r.id)
@@ -230,12 +254,13 @@ export function EventDetailClient({
                 <TableHead>Dietary</TableHead>
                 <TableHead>Notified</TableHead>
                 <TableHead>Replied</TableHead>
+                <TableHead>Notes</TableHead>
                 <TableHead className="w-[120px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {regs.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No attendees yet. Add someone to get started.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No attendees yet. Add someone to get started.</TableCell></TableRow>
               ) : regs.map(r => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">
@@ -273,6 +298,9 @@ export function EventDetailClient({
                       ? <Badge variant="success">Replied</Badge>
                       : r.notified_at ? <Badge variant="warning">Waiting</Badge> : <span className="text-muted-foreground">—</span>}
                   </TableCell>
+                  <TableCell className="max-w-[220px] text-sm text-muted-foreground">
+                    {r.response_notes ? <span className="line-clamp-2" title={r.response_notes}>{r.response_notes}</span> : '—'}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm" className="h-8" onClick={() => setEditing(r)}>Edit</Button>
@@ -296,8 +324,20 @@ export function EventDetailClient({
             <div className="space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input autoFocus placeholder="Search contacts…" value={attendeeSearch} onChange={e => setAttendeeSearch(e.target.value)} className="pl-9" />
+                <Input autoFocus placeholder="Search name, org, group…" value={attendeeSearch} onChange={e => setAttendeeSearch(e.target.value)} className="pl-9" />
               </div>
+              {allGroups.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Add a whole group</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allGroups.map(g => (
+                      <button key={g} disabled={busy} onClick={() => addGroup(g)} className="rounded-full border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-50">
+                        + {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="max-h-[45vh] overflow-y-auto divide-y">
                 {visibleUnregistered.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-3 text-center">No matching contacts.</p>

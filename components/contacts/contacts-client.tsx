@@ -53,7 +53,7 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
     return contacts.filter(c => {
       if (groupFilter !== 'all' && !(c.groups ?? []).includes(groupFilter)) return false
       if (!q) return true
-      return [c.name, c.organization, c.email].filter(Boolean).some(v => v!.toLowerCase().includes(q))
+      return [c.name, c.organization, c.email, ...(c.groups ?? [])].filter(Boolean).some(v => v!.toLowerCase().includes(q))
     })
   }, [contacts, search, groupFilter])
 
