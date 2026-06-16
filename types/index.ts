@@ -23,6 +23,8 @@ export interface Contact {
   dietary_needs: string | null
   /** Standing accommodation notes, used as the default when registering for an event. */
   accommodation_notes: string | null
+  /** Free-form labels for organising and filtering (e.g. "Speakers", "VIPs"). */
+  groups: string[]
   notes: string | null
   last_contact_date: string | null
   created_by: string | null
@@ -78,9 +80,12 @@ export interface Event {
   /** Link to a hosted agenda (PDF, web page, etc.) offered to attendees. */
   agenda_url: string | null
   status: EventStatus
+  /** Coordinator who supplies the attendee list for this event. */
+  key_contact_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
+  key_contact?: Contact
 }
 
 // ─── Registrations (a contact signed up to an event) ─────────
@@ -99,6 +104,9 @@ export interface Registration {
   accommodation_needed: boolean
   accommodation_notes: string | null
   dietary_needs: string | null
+  /** Accommodation arrival/departure for this attendee (may differ from event dates). */
+  arrival_date: string | null
+  departure_date: string | null
   /** When the agenda was emailed to this attendee. */
   agenda_sent_at: string | null
   /** When the signup/notification email was sent. */

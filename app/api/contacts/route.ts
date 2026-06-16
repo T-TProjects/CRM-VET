@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       status: body.status || 'prospect',
       dietary_needs: body.dietary_needs || null,
       accommodation_notes: body.accommodation_notes || null,
+      groups: Array.isArray(body.groups) ? body.groups : [],
       notes: body.notes || null,
       created_by: user.id,
     })
