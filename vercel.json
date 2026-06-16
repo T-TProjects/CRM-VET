@@ -1,0 +1,23 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "regions": ["syd1"],
+  "crons": [
+    {
+      "path": "/api/cron/gmail-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/no-reply-chase",
+      "schedule": "0 23 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/webhooks/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ]
+}
