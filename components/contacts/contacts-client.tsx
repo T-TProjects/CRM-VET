@@ -25,12 +25,13 @@ const STATUS_VARIANT: Record<ContactStatus, 'success' | 'secondary' | 'outline'>
 
 const empty = {
   name: '', organization: '', email: '', phone: '',
-  status: 'prospect' as ContactStatus, dietary_needs: '', accommodation_notes: '', notes: '',
+  status: 'prospect' as ContactStatus, dietary_needs: '', accommodation_notes: '', groups: '', notes: '',
 }
 
 export function ContactsClient({ initialContacts }: { initialContacts: Contact[] }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts)
   const [search, setSearch] = useState('')
+  const [groupFilter, setGroupFilter] = useState('all')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Contact | null>(null)
   const [form, setForm] = useState(empty)
@@ -41,13 +42,20 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
   const fileRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
+  const allGroups = useMemo(() => {
+    const set = new Set<string>()
+    contacts.forEach(c => (c.groups ?? []).forEach(g => set.add(g)))
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [contacts])
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    if (!q) return contacts
-    return contacts.filter(c =>
-      [c.name, c.organization, c.email].filter(Boolean).some(v => v!.toLowerCase().includes(q))
-    )
-  }, [contacts, search])
+    return contacts.filter(c => {
+      if (groupFilter !== 'all' && !(c.groups ?? []).includes(groupFilter)) return false
+      if (!q) return true
+      return [c.name, c.organization, c.email].filter(Boolean).some(v => v!.toLowerCase().includes(q))
+    })
+  }, [contacts, search, groupFilter])
 
   function openNew() {
     setEditing(null)
@@ -60,7 +68,7 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
     setForm({
       name: c.name, organization: c.organization ?? '', email: c.email ?? '', phone: c.phone ?? '',
       status: c.status, dietary_needs: c.dietary_needs ?? '',
-      accommodation_notes: c.accommodation_notes ?? '', notes: c.notes ?? '',
+      accommodation_notes: c.accommodation_notes ?? '', groups: (c.groups ?? []).join(', '), notes: c.notes ?? '',
     })
     setOpen(true)
   }
@@ -73,10 +81,14 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
     setSaving(true)
     const url = editing ? `/api/contacts/${editing.id}` : '/api/contacts'
     const method = editing ? 'PATCH' : 'POST'
+    const payload = {
+      ...form,
+      groups: form.groups.split(',').map(s => s.trim()).filter(Boolean),
+    }
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     })
     const json = await res.json()
     setSaving(false)
