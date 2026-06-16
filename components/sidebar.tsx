@@ -69,12 +69,7 @@ export function Sidebar({ user, pendingCount = 0 }: SidebarProps) {
   const SidebarContent = () => (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center border-b px-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Users className="h-4 w-4" />
-          </div>
-          <span className="font-semibold text-sm leading-tight">Tonia CRM</span>
-        </div>
+        <span className="font-semibold text-sm leading-tight">Tonia CRM</span>
       </div>
 
       <div className="border-b px-4 py-3">
