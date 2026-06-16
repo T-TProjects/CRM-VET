@@ -244,6 +244,7 @@ export function ContactsClient({ initialContacts }: { initialContacts: Contact[]
             </div>
             <Field label="Dietary needs (default)"><Input value={form.dietary_needs} onChange={e => setForm({ ...form, dietary_needs: e.target.value })} placeholder="e.g. vegetarian, nut allergy" /></Field>
             <Field label="Accommodation notes (default)"><Input value={form.accommodation_notes} onChange={e => setForm({ ...form, accommodation_notes: e.target.value })} placeholder="e.g. ground floor room" /></Field>
+            <Field label="Groups (comma separated)"><Input value={form.groups} onChange={e => setForm({ ...form, groups: e.target.value })} placeholder="e.g. Speakers, VIPs, 2026 cohort" /></Field>
             <Field label="Notes"><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[72px]" /></Field>
           </div>
           <DialogFooter>
