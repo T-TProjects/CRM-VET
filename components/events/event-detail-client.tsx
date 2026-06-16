@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, CalendarDays, MapPin, FileText, Plus, Send, Trash2,
-  CheckCircle2, Clock, XCircle, Bed, Utensils,
+  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,13 +16,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import type { Event, Registration, Contact, RegistrationStatus } from '@/types'
+import type { Event, EventStatus, Registration, Contact, RegistrationStatus } from '@/types'
 
 const STATUS_VARIANT: Record<RegistrationStatus, 'success' | 'secondary' | 'outline' | 'warning' | 'destructive'> = {
   signed_up: 'success', invited: 'warning', declined: 'destructive', attended: 'success', no_show: 'outline',
 }
 const STATUS_LABEL: Record<RegistrationStatus, string> = {
   signed_up: 'Signed up', invited: 'Invited', declined: 'Declined', attended: 'Attended', no_show: 'No show',
+}
+const EVENT_STATUS_VARIANT: Record<EventStatus, 'success' | 'secondary' | 'outline' | 'warning' | 'destructive'> = {
+  active: 'success', upcoming: 'warning', draft: 'secondary', completed: 'outline', cancelled: 'destructive',
 }
 
 export function EventDetailClient({
@@ -32,6 +35,9 @@ export function EventDetailClient({
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState<Registration | null>(null)
   const [busy, setBusy] = useState(false)
+  const [ev, setEv] = useState(event)
+  const [editOpen, setEditOpen] = useState(false)
+  const [attendeeSearch, setAttendeeSearch] = useState('')
   const { toast } = useToast()
 
   const summary = useMemo(() => {
@@ -46,6 +52,14 @@ export function EventDetailClient({
     const ids = new Set(regs.map(r => r.contact_id))
     return allContacts.filter(c => !ids.has(c.id))
   }, [regs, allContacts])
+
+  const visibleUnregistered = useMemo(() => {
+    const q = attendeeSearch.toLowerCase().trim()
+    if (!q) return unregistered
+    return unregistered.filter(c =>
+      [c.name, c.organization, c.email].filter(Boolean).some(v => v!.toLowerCase().includes(q))
+    )
+  }, [unregistered, attendeeSearch])
 
   function patchLocal(updated: Registration) {
     setRegs(prev => prev.map(r => (r.id === updated.id ? { ...r, ...updated, contact: r.contact } : r)))
@@ -109,6 +123,22 @@ export function EventDetailClient({
     toast({ title: `Sent ${json.sent ?? registrationIds.length} email(s)` })
   }
 
+  async function updateEvent(body: Partial<Event>): Promise<boolean> {
+    const res = await fetch(`/api/events/${ev.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      toast({ title: 'Could not save', description: json.error, variant: 'destructive' })
+      return false
+    }
+    setEv(json.event as Event)
+    toast({ title: 'Conference updated' })
+    return true
+  }
+
   const invitedIds = regs.filter(r => r.status === 'invited').map(r => r.id)
   const signedUpIds = regs.filter(r => r.status === 'signed_up').map(r => r.id)
   const noReplyIds = regs.filter(r => r.notified_at && !r.replied_at).map(r => r.id)
@@ -121,12 +151,22 @@ export function EventDetailClient({
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-semibold">{event.name}</h1>
+          <h1 className="text-2xl font-semibold">{ev.name}</h1>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            {event.starts_at && <span className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> {formatDate(event.starts_at)}</span>}
-            {event.location && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {event.location}</span>}
-            {event.agenda_url && <a href={event.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-foreground hover:underline"><FileText className="h-4 w-4" /> Agenda</a>}
+            {ev.starts_at && (
+              <span className="flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4" />
+                {formatDate(ev.starts_at)}
+                {ev.ends_at && ev.ends_at.slice(0, 10) !== ev.starts_at.slice(0, 10) ? ` – ${formatDate(ev.ends_at)}` : ''}
+              </span>
+            )}
+            {ev.location && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {ev.location}</span>}
+            {ev.agenda_url && <a href={ev.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-foreground hover:underline"><FileText className="h-4 w-4" /> Agenda</a>}
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant={EVENT_STATUS_VARIANT[ev.status]} className="capitalize">{ev.status}</Badge>
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}><Pencil className="h-4 w-4 mr-1.5" /> Edit</Button>
         </div>
       </div>
 
@@ -140,7 +180,7 @@ export function EventDetailClient({
 
       {/* Bulk actions */}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-1.5" /> Add attendee</Button>
+        <Button onClick={() => { setAttendeeSearch(''); setAddOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add attendee</Button>
         <Button variant="outline" disabled={busy || invitedIds.length === 0} onClick={() => notify('event_invite', invitedIds)}>
           <Send className="h-4 w-4 mr-1.5" /> Send invite to no-response ({invitedIds.length})
         </Button>
@@ -212,22 +252,30 @@ export function EventDetailClient({
       </Card>
 
       {/* Add attendee dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setAttendeeSearch('') }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add attendee</DialogTitle></DialogHeader>
           {unregistered.length === 0 ? (
             <p className="text-sm text-muted-foreground">Everyone in your contacts is already on this event. Add more people from the Contacts page.</p>
           ) : (
-            <div className="max-h-[50vh] overflow-y-auto divide-y">
-              {unregistered.map(c => (
-                <button key={c.id} disabled={busy} onClick={() => addAttendee(c.id)} className="flex w-full items-center justify-between py-2.5 text-left text-sm hover:bg-accent/40 px-2 rounded">
-                  <span>
-                    <span className="font-medium">{c.name}</span>
-                    {c.organization && <span className="text-muted-foreground"> · {c.organization}</span>}
-                  </span>
-                  <Plus className="h-4 w-4 text-muted-foreground" />
-                </button>
-              ))}
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input autoFocus placeholder="Search contacts…" value={attendeeSearch} onChange={e => setAttendeeSearch(e.target.value)} className="pl-9" />
+              </div>
+              <div className="max-h-[45vh] overflow-y-auto divide-y">
+                {visibleUnregistered.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-3 text-center">No matching contacts.</p>
+                ) : visibleUnregistered.map(c => (
+                  <button key={c.id} disabled={busy} onClick={() => addAttendee(c.id)} className="flex w-full items-center justify-between py-2.5 text-left text-sm hover:bg-accent/40 px-2 rounded">
+                    <span>
+                      <span className="font-medium">{c.name}</span>
+                      {c.organization && <span className="text-muted-foreground"> · {c.organization}</span>}
+                    </span>
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </DialogContent>
@@ -241,7 +289,79 @@ export function EventDetailClient({
           onSave={async (body) => { await updateReg(editing.id, body); setEditing(null) }}
         />
       )}
+
+      {/* Edit conference dialog */}
+      {editOpen && (
+        <EditEventDialog event={ev} onClose={() => setEditOpen(false)} onSave={updateEvent} />
+      )}
     </div>
+  )
+}
+
+function EditEventDialog({
+  event, onClose, onSave,
+}: { event: Event; onClose: () => void; onSave: (body: Partial<Event>) => Promise<boolean> }) {
+  const toDate = (iso: string | null) => (iso ? iso.slice(0, 10) : '')
+  const [form, setForm] = useState({
+    name: event.name,
+    location: event.location ?? '',
+    starts_at: toDate(event.starts_at),
+    ends_at: toDate(event.ends_at),
+    agenda_url: event.agenda_url ?? '',
+    status: event.status,
+    description: event.description ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    const ok = await onSave({
+      name: form.name.trim(),
+      location: form.location || null,
+      starts_at: form.starts_at || null,
+      ends_at: form.ends_at || null,
+      agenda_url: form.agenda_url || null,
+      status: form.status,
+      description: form.description || null,
+    })
+    setSaving(false)
+    if (ok) onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Edit conference</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5"><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Location</Label><Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Starts</Label><Input type="date" value={form.starts_at} onChange={e => setForm({ ...form, starts_at: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Ends</Label><Input type="date" value={form.ends_at} onChange={e => setForm({ ...form, ends_at: e.target.value })} /></div>
+          </div>
+          <div className="space-y-1.5"><Label>Agenda link</Label><Input value={form.agenda_url} onChange={e => setForm({ ...form, agenda_url: e.target.value })} placeholder="https://…" /></div>
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select value={form.status} onValueChange={(v: EventStatus) => setForm({ ...form, status: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5"><Label>Description</Label><textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[72px]" /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving || !form.name.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
