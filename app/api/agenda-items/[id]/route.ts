@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/api'
 
-const EDITABLE = [
-  'status', 'accommodation_needed', 'accommodation_notes',
-  'dietary_needs', 'arrival_date', 'departure_date', 'response_notes', 'replied_at',
-  'day1_attending', 'day2_attending', 'dinner1_attending', 'dinner2_attending',
-  'travel_notes',
-] as const
+const EDITABLE = ['day', 'start_time', 'title', 'presenter', 'location', 'notes', 'sort_order'] as const
 
-// PATCH /api/registrations/:id — update status / needs / response
+// PATCH /api/agenda-items/:id — update a run-sheet item.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser()
   if ('response' in auth) return auth.response
@@ -21,23 +16,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const { data, error } = await supabase
-    .from('registrations')
+    .from('event_agenda_items')
     .update(updates)
     .eq('id', params.id)
-    .select('*, contact:contacts(*)')
+    .select('*')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-  return NextResponse.json({ registration: data })
+  return NextResponse.json({ item: data })
 }
 
-// DELETE /api/registrations/:id — remove a contact from an event
+// DELETE /api/agenda-items/:id — remove a run-sheet item.
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser()
   if ('response' in auth) return auth.response
   const { supabase } = auth
 
-  const { error } = await supabase.from('registrations').delete().eq('id', params.id)
+  const { error } = await supabase.from('event_agenda_items').delete().eq('id', params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

@@ -115,8 +115,6 @@ export interface Registration {
   day2_attending: boolean
   dinner1_attending: boolean
   dinner2_attending: boolean
-  /** Room type for accommodation (e.g. Single, Twin). */
-  room_type: string | null
   /** Travel / flight details for this attendee. */
   travel_notes: string | null
   /** Accommodation arrival/departure for this attendee (may differ from event dates). */

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, CalendarDays, MapPin, FileText, Plus, Send, Trash2,
   CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star, Download,
@@ -15,8 +16,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
+import { RunSheetSection } from '@/components/events/run-sheet-section'
+import { BudgetSection } from '@/components/events/budget-section'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import type { Event, EventStatus, Registration, Contact, RegistrationStatus } from '@/types'
+import type { Event, EventStatus, Registration, Contact, RegistrationStatus, RunSheetItem, BudgetItem } from '@/types'
 
 const STATUS_VARIANT: Record<RegistrationStatus, 'success' | 'secondary' | 'outline' | 'warning' | 'destructive'> = {
   signed_up: 'success', invited: 'warning', declined: 'destructive', attended: 'success', no_show: 'outline',
@@ -29,8 +32,15 @@ const EVENT_STATUS_VARIANT: Record<EventStatus, 'success' | 'secondary' | 'outli
 }
 
 export function EventDetailClient({
-  event, initialRegistrations, allContacts,
-}: { event: Event; initialRegistrations: Registration[]; allContacts: Contact[] }) {
+  event, initialRegistrations, allContacts, initialRunSheet, initialBudget,
+}: {
+  event: Event
+  initialRegistrations: Registration[]
+  allContacts: Contact[]
+  initialRunSheet: RunSheetItem[]
+  initialBudget: BudgetItem[]
+}) {
+  const router = useRouter()
   const [regs, setRegs] = useState<Registration[]>(initialRegistrations)
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState<Registration | null>(null)
@@ -166,6 +176,17 @@ export function EventDetailClient({
     return true
   }
 
+  async function deleteEvent() {
+    if (!confirm(`Delete "${ev.name}"? This removes the conference and all its attendees, run sheet and budget. This cannot be undone.`)) return
+    setBusy(true)
+    const res = await fetch(`/api/events/${ev.id}`, { method: 'DELETE' })
+    setBusy(false)
+    if (!res.ok) { toast({ title: 'Could not delete', variant: 'destructive' }); return }
+    toast({ title: 'Conference deleted' })
+    router.push('/events')
+    router.refresh()
+  }
+
   async function bulkAddAttendees(people: { name: string; email: string }[]) {
     if (people.length === 0) return
     setBusy(true)
@@ -208,14 +229,14 @@ export function EventDetailClient({
   function exportAttendeesCSV() {
     const rows: (string | number)[][] = [[
       'Clinic', 'Name', 'Status', 'Day 1', 'Day 2', 'Dinner 1', 'Dinner 2',
-      'Dietary', 'Needs room', 'Room type', 'Travel', 'Notes',
+      'Dietary', 'Needs room', 'Travel', 'Notes',
     ]]
     for (const r of regs) {
       rows.push([
         r.contact?.organization ?? '', r.contact?.name ?? '', STATUS_LABEL[r.status],
         r.day1_attending ? 'Y' : '', r.day2_attending ? 'Y' : '',
         r.dinner1_attending ? 'Y' : '', r.dinner2_attending ? 'Y' : '',
-        r.dietary_needs ?? '', r.accommodation_needed ? 'Y' : '', r.room_type ?? '',
+        r.dietary_needs ?? '', r.accommodation_needed ? 'Y' : '',
         r.travel_notes ?? '', r.response_notes ?? '',
       ])
     }
@@ -226,13 +247,13 @@ export function EventDetailClient({
     const guests = regs.filter(r => r.accommodation_needed)
     if (guests.length === 0) { toast({ title: 'No one needs accommodation yet' }); return }
     const rows: (string | number)[][] = [[
-      'Clinic', 'Guest name', 'Check-in', 'Check-out', 'Nights', 'Room type', 'Dietary', 'Notes',
+      'Clinic', 'Guest name', 'Check-in', 'Check-out', 'Nights', 'Dietary', 'Notes',
     ]]
     for (const r of guests) {
       rows.push([
         r.contact?.organization ?? '', r.contact?.name ?? '',
         r.arrival_date ? formatDate(r.arrival_date) : '', r.departure_date ? formatDate(r.departure_date) : '',
-        nightsBetween(r.arrival_date, r.departure_date), r.room_type ?? '',
+        nightsBetween(r.arrival_date, r.departure_date),
         r.dietary_needs ?? '', r.accommodation_notes ?? '',
       ])
     }
@@ -269,6 +290,7 @@ export function EventDetailClient({
         <div className="flex items-center gap-2">
           <Badge variant={EVENT_STATUS_VARIANT[ev.status]} className="capitalize">{ev.status}</Badge>
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}><Pencil className="h-4 w-4 mr-1.5" /> Edit</Button>
+          <Button variant="outline" size="sm" className="text-destructive" disabled={busy} onClick={deleteEvent}><Trash2 className="h-4 w-4 mr-1.5" /> Delete</Button>
         </div>
       </div>
 
@@ -380,7 +402,6 @@ export function EventDetailClient({
                             {nightsBetween(r.arrival_date, r.departure_date) && ` (${nightsBetween(r.arrival_date, r.departure_date)}n)`}
                           </span>
                         )}
-                        {r.room_type && <span className="mt-0.5 block text-xs text-muted-foreground">{r.room_type}</span>}
                       </span>
                     ) : '—'}
                   </TableCell>
@@ -408,6 +429,12 @@ export function EventDetailClient({
           </Table>
         </CardContent>
       </Card>
+
+      {/* Run sheet */}
+      <RunSheetSection eventId={ev.id} initialItems={initialRunSheet} />
+
+      {/* Budget */}
+      <BudgetSection eventId={ev.id} initialItems={initialBudget} />
 
       {/* Add attendee dialog */}
       <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setAttendeeSearch('') }}>
@@ -660,7 +687,6 @@ function EditRegistrationDialog({
   const [accNotes, setAccNotes] = useState(reg.accommodation_notes ?? '')
   const [arrival, setArrival] = useState(reg.arrival_date ?? '')
   const [departure, setDeparture] = useState(reg.departure_date ?? '')
-  const [roomType, setRoomType] = useState(reg.room_type ?? '')
   const [dietary, setDietary] = useState(reg.dietary_needs ?? '')
   const [travel, setTravel] = useState(reg.travel_notes ?? '')
   const [day1, setDay1] = useState(!!reg.day1_attending)
@@ -682,7 +708,6 @@ function EditRegistrationDialog({
       accommodation_notes: accNotes || null,
       arrival_date: arrival || null,
       departure_date: departure || null,
-      room_type: roomType || null,
       dietary_needs: dietary || null,
       travel_notes: travel || null,
       response_notes: responseNotes || null,
@@ -714,10 +739,7 @@ function EditRegistrationDialog({
             <div className="space-y-1.5"><Label>Arrival</Label><Input type="date" value={arrival} onChange={e => setArrival(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Departure</Label><Input type="date" value={departure} onChange={e => setDeparture(e.target.value)} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Room type</Label><Input value={roomType} onChange={e => setRoomType(e.target.value)} placeholder="e.g. Single, Twin" /></div>
-            <div className="space-y-1.5"><Label>Accommodation notes</Label><Input value={accNotes} onChange={e => setAccNotes(e.target.value)} /></div>
-          </div>
+          <div className="space-y-1.5"><Label>Accommodation notes</Label><Input value={accNotes} onChange={e => setAccNotes(e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Travel / flights</Label><Input value={travel} onChange={e => setTravel(e.target.value)} placeholder="e.g. arrives 4:55pm, departs 5:50pm" /></div>
           <div className="space-y-1.5"><Label>Notes</Label><textarea value={responseNotes} onChange={e => setResponseNotes(e.target.value)} placeholder="Notes about this person for this event" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" /></div>
           <label className="flex items-center gap-2 text-sm">

@@ -20,7 +20,6 @@ ALTER TABLE public.registrations
   ADD COLUMN IF NOT EXISTS day2_attending    BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS dinner1_attending BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS dinner2_attending BOOLEAN NOT NULL DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS room_type         TEXT,
   ADD COLUMN IF NOT EXISTS travel_notes      TEXT;
 
 -- Run sheet (order of the day) — one row per session / activity.
