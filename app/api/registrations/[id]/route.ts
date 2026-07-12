@@ -4,6 +4,8 @@ import { requireUser } from '@/lib/api'
 const EDITABLE = [
   'status', 'accommodation_needed', 'accommodation_notes',
   'dietary_needs', 'arrival_date', 'departure_date', 'response_notes', 'replied_at',
+  'day1_attending', 'day2_attending', 'dinner1_attending', 'dinner2_attending',
+  'room_type', 'travel_notes',
 ] as const
 
 // PATCH /api/registrations/:id — update status / needs / response

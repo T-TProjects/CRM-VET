@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, CalendarDays, MapPin, FileText, Plus, Send, Trash2,
-  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star,
+  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star, Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +48,25 @@ export function EventDetailClient({
     const awaitingReply = regs.filter(r => r.notified_at && !r.replied_at).length
     const noResponse = regs.filter(r => r.status === 'invited').length
     return { total: regs.length, signedUp, declined, awaitingReply, noResponse }
+  }, [regs])
+
+  // Catering / accommodation tallies for the venue and hotel.
+  const catering = useMemo(() => {
+    let day1 = 0, day2 = 0, dinner1 = 0, dinner2 = 0, rooms = 0
+    for (const r of regs) {
+      if (r.day1_attending) day1++
+      if (r.day2_attending) day2++
+      if (r.dinner1_attending) dinner1++
+      if (r.dinner2_attending) dinner2++
+      if (r.accommodation_needed) rooms++
+    }
+    const diet = new Map<string, number>()
+    for (const r of regs) {
+      const d = r.dietary_needs?.trim()
+      if (d) diet.set(d, (diet.get(d) ?? 0) + 1)
+    }
+    const dietary = Array.from(diet.entries()).sort((a, b) => b[1] - a[1])
+    return { day1, day2, dinner1, dinner2, rooms, dietary }
   }, [regs])
 
   const unregistered = useMemo(() => {
@@ -186,6 +205,40 @@ export function EventDetailClient({
     toast({ title: `Added ${json.added} from "${group}"` })
   }
 
+  function exportAttendeesCSV() {
+    const rows: (string | number)[][] = [[
+      'Clinic', 'Name', 'Status', 'Day 1', 'Day 2', 'Dinner 1', 'Dinner 2',
+      'Dietary', 'Needs room', 'Room type', 'Travel', 'Notes',
+    ]]
+    for (const r of regs) {
+      rows.push([
+        r.contact?.organization ?? '', r.contact?.name ?? '', STATUS_LABEL[r.status],
+        r.day1_attending ? 'Y' : '', r.day2_attending ? 'Y' : '',
+        r.dinner1_attending ? 'Y' : '', r.dinner2_attending ? 'Y' : '',
+        r.dietary_needs ?? '', r.accommodation_needed ? 'Y' : '', r.room_type ?? '',
+        r.travel_notes ?? '', r.response_notes ?? '',
+      ])
+    }
+    downloadCSV(`${ev.name} - attendees.csv`, rows)
+  }
+
+  function exportHotelCSV() {
+    const guests = regs.filter(r => r.accommodation_needed)
+    if (guests.length === 0) { toast({ title: 'No one needs accommodation yet' }); return }
+    const rows: (string | number)[][] = [[
+      'Clinic', 'Guest name', 'Check-in', 'Check-out', 'Nights', 'Room type', 'Dietary', 'Notes',
+    ]]
+    for (const r of guests) {
+      rows.push([
+        r.contact?.organization ?? '', r.contact?.name ?? '',
+        r.arrival_date ? formatDate(r.arrival_date) : '', r.departure_date ? formatDate(r.departure_date) : '',
+        nightsBetween(r.arrival_date, r.departure_date), r.room_type ?? '',
+        r.dietary_needs ?? '', r.accommodation_notes ?? '',
+      ])
+    }
+    downloadCSV(`${ev.name} - hotel list.csv`, rows)
+  }
+
   const keyContact = allContacts.find(c => c.id === ev.key_contact_id) ?? null
   const invitedIds = regs.filter(r => r.status === 'invited').map(r => r.id)
   const signedUpIds = regs.filter(r => r.status === 'signed_up').map(r => r.id)
@@ -227,6 +280,32 @@ export function EventDetailClient({
         <Stat label="Declined" value={summary.declined} icon={XCircle} />
       </div>
 
+      {/* Catering & accommodation summary */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+            <Utensils className="h-4 w-4" /> Catering &amp; accommodation
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+            <MiniStat label="Day 1" value={catering.day1} />
+            <MiniStat label="Day 2" value={catering.day2} />
+            <MiniStat label="Dinner 1" value={catering.dinner1} />
+            <MiniStat label="Dinner 2" value={catering.dinner2} />
+            <MiniStat label="Rooms" value={catering.rooms} />
+          </div>
+          {catering.dietary.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-xs text-muted-foreground">Dietary:</span>
+              {catering.dietary.map(([label, count]) => (
+                <Badge key={label} variant="secondary" className="font-normal">{label} × {count}</Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Bulk actions */}
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => { setAttendeeSearch(''); setAddOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add attendee</Button>
@@ -239,6 +318,12 @@ export function EventDetailClient({
         </Button>
         <Button variant="outline" disabled={busy || noReplyIds.length === 0} onClick={() => notify('no_reply_chase', noReplyIds)}>
           <Clock className="h-4 w-4 mr-1.5" /> Chase no-replies ({noReplyIds.length})
+        </Button>
+        <Button variant="outline" disabled={regs.length === 0} onClick={exportAttendeesCSV}>
+          <Download className="h-4 w-4 mr-1.5" /> Export attendee list
+        </Button>
+        <Button variant="outline" disabled={catering.rooms === 0} onClick={exportHotelCSV}>
+          <Download className="h-4 w-4 mr-1.5" /> Export hotel list
         </Button>
       </div>
 
@@ -266,6 +351,14 @@ export function EventDetailClient({
                   <TableCell className="font-medium">
                     {r.contact?.name ?? 'Unknown'}
                     {r.contact?.organization && <span className="block text-xs text-muted-foreground">{r.contact.organization}</span>}
+                    {(r.day1_attending || r.day2_attending || r.dinner1_attending || r.dinner2_attending) && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {r.day1_attending && <AttendTag>Day 1</AttendTag>}
+                        {r.day2_attending && <AttendTag>Day 2</AttendTag>}
+                        {r.dinner1_attending && <AttendTag>Dinner 1</AttendTag>}
+                        {r.dinner2_attending && <AttendTag>Dinner 2</AttendTag>}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Select value={r.status} onValueChange={(v: RegistrationStatus) => updateReg(r.id, { status: v })}>
@@ -284,8 +377,10 @@ export function EventDetailClient({
                         {(r.arrival_date || r.departure_date) && (
                           <span className="mt-0.5 block text-xs text-muted-foreground">
                             {r.arrival_date ? formatDate(r.arrival_date) : '?'} → {r.departure_date ? formatDate(r.departure_date) : '?'}
+                            {nightsBetween(r.arrival_date, r.departure_date) && ` (${nightsBetween(r.arrival_date, r.departure_date)}n)`}
                           </span>
                         )}
+                        {r.room_type && <span className="mt-0.5 block text-xs text-muted-foreground">{r.room_type}</span>}
                       </span>
                     ) : '—'}
                   </TableCell>
@@ -405,6 +500,9 @@ function EditEventDialog({
   const [form, setForm] = useState({
     name: event.name,
     location: event.location ?? '',
+    venue: event.venue ?? '',
+    dinner_venue: event.dinner_venue ?? '',
+    catering_contact: event.catering_contact ?? '',
     starts_at: toDate(event.starts_at),
     ends_at: toDate(event.ends_at),
     agenda_url: event.agenda_url ?? '',
@@ -420,6 +518,9 @@ function EditEventDialog({
     const ok = await onSave({
       name: form.name.trim(),
       location: form.location || null,
+      venue: form.venue || null,
+      dinner_venue: form.dinner_venue || null,
+      catering_contact: form.catering_contact || null,
       starts_at: form.starts_at || null,
       ends_at: form.ends_at || null,
       agenda_url: form.agenda_url || null,
@@ -437,7 +538,12 @@ function EditEventDialog({
         <DialogHeader><DialogTitle>Edit conference</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5"><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>Location</Label><Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Location (town/city)</Label><Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Venue</Label><Input value={form.venue} onChange={e => setForm({ ...form, venue: e.target.value })} placeholder="Meeting venue" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Dinner venue</Label><Input value={form.dinner_venue} onChange={e => setForm({ ...form, dinner_venue: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Catering contact</Label><Input value={form.catering_contact} onChange={e => setForm({ ...form, catering_contact: e.target.value })} /></div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Starts</Label><Input type="date" value={form.starts_at} onChange={e => setForm({ ...form, starts_at: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>Ends</Label><Input type="date" value={form.ends_at} onChange={e => setForm({ ...form, ends_at: e.target.value })} /></div>
@@ -477,6 +583,32 @@ function EditEventDialog({
   )
 }
 
+// Whole nights between two ISO dates, or '' if either is missing.
+function nightsBetween(arrival: string | null, departure: string | null): string {
+  if (!arrival || !departure) return ''
+  const ms = new Date(departure).getTime() - new Date(arrival).getTime()
+  const n = Math.round(ms / 86_400_000)
+  return n > 0 ? String(n) : ''
+}
+
+// Build a CSV (Excel-friendly, UTF-8 BOM) and trigger a download.
+function downloadCSV(filename: string, rows: (string | number)[][]) {
+  const esc = (v: string | number) => {
+    const s = String(v ?? '')
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = rows.map(r => r.map(esc).join(',')).join('\r\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // Parse a pasted attendee list: one per line, each a name, an email, or "Name, email".
 function parseAttendees(text: string): { name: string; email: string }[] {
   return text
@@ -490,6 +622,23 @@ function parseAttendees(text: string): { name: string; email: string }[] {
       return { name, email }
     })
     .filter(p => p.name || p.email)
+}
+
+function AttendTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+      {children}
+    </span>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border bg-muted/30 px-3 py-2 text-center">
+      <div className="text-lg font-semibold">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  )
 }
 
 function Stat({ label, value, icon: Icon }: { label: string; value: number; icon: React.ElementType }) {
@@ -511,7 +660,13 @@ function EditRegistrationDialog({
   const [accNotes, setAccNotes] = useState(reg.accommodation_notes ?? '')
   const [arrival, setArrival] = useState(reg.arrival_date ?? '')
   const [departure, setDeparture] = useState(reg.departure_date ?? '')
+  const [roomType, setRoomType] = useState(reg.room_type ?? '')
   const [dietary, setDietary] = useState(reg.dietary_needs ?? '')
+  const [travel, setTravel] = useState(reg.travel_notes ?? '')
+  const [day1, setDay1] = useState(!!reg.day1_attending)
+  const [day2, setDay2] = useState(!!reg.day2_attending)
+  const [dinner1, setDinner1] = useState(!!reg.dinner1_attending)
+  const [dinner2, setDinner2] = useState(!!reg.dinner2_attending)
   const [responseNotes, setResponseNotes] = useState(reg.response_notes ?? '')
   const [replied, setReplied] = useState(!!reg.replied_at)
   const [saving, setSaving] = useState(false)
@@ -519,11 +674,17 @@ function EditRegistrationDialog({
   async function save() {
     setSaving(true)
     await onSave({
+      day1_attending: day1,
+      day2_attending: day2,
+      dinner1_attending: dinner1,
+      dinner2_attending: dinner2,
       accommodation_needed: accNeeded,
       accommodation_notes: accNotes || null,
       arrival_date: arrival || null,
       departure_date: departure || null,
+      room_type: roomType || null,
       dietary_needs: dietary || null,
+      travel_notes: travel || null,
       response_notes: responseNotes || null,
       replied_at: replied ? (reg.replied_at ?? new Date().toISOString()) : null,
     })
@@ -535,16 +696,29 @@ function EditRegistrationDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{reg.contact?.name ?? 'Attendee'}</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Attending</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={day1} onChange={e => setDay1(e.target.checked)} className="h-4 w-4" /> Day 1</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={day2} onChange={e => setDay2(e.target.checked)} className="h-4 w-4" /> Day 2</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={dinner1} onChange={e => setDinner1(e.target.checked)} className="h-4 w-4" /> Dinner 1</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={dinner2} onChange={e => setDinner2(e.target.checked)} className="h-4 w-4" /> Dinner 2</label>
+            </div>
+          </div>
+          <div className="space-y-1.5"><Label>Dietary needs</Label><Input value={dietary} onChange={e => setDietary(e.target.value)} placeholder="e.g. vegetarian, gluten free" /></div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={accNeeded} onChange={e => setAccNeeded(e.target.checked)} className="h-4 w-4" />
             Needs accommodation
           </label>
-          <div className="space-y-1.5"><Label>Accommodation notes</Label><Input value={accNotes} onChange={e => setAccNotes(e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Arrival</Label><Input type="date" value={arrival} onChange={e => setArrival(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Departure</Label><Input type="date" value={departure} onChange={e => setDeparture(e.target.value)} /></div>
           </div>
-          <div className="space-y-1.5"><Label>Dietary needs</Label><Input value={dietary} onChange={e => setDietary(e.target.value)} placeholder="e.g. vegetarian, gluten free" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Room type</Label><Input value={roomType} onChange={e => setRoomType(e.target.value)} placeholder="e.g. Single, Twin" /></div>
+            <div className="space-y-1.5"><Label>Accommodation notes</Label><Input value={accNotes} onChange={e => setAccNotes(e.target.value)} /></div>
+          </div>
+          <div className="space-y-1.5"><Label>Travel / flights</Label><Input value={travel} onChange={e => setTravel(e.target.value)} placeholder="e.g. arrives 4:55pm, departs 5:50pm" /></div>
           <div className="space-y-1.5"><Label>Notes</Label><textarea value={responseNotes} onChange={e => setResponseNotes(e.target.value)} placeholder="Notes about this person for this event" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" /></div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={replied} onChange={e => setReplied(e.target.checked)} className="h-4 w-4" />

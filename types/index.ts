@@ -80,6 +80,12 @@ export interface Event {
   /** Link to a hosted agenda (PDF, web page, etc.) offered to attendees. */
   agenda_url: string | null
   status: EventStatus
+  /** Main meeting venue. */
+  venue: string | null
+  /** Where the conference dinner(s) are held. */
+  dinner_venue: string | null
+  /** Catering contact (name / phone / email). */
+  catering_contact: string | null
   /** Coordinator who supplies the attendee list for this event. */
   key_contact_id: string | null
   created_by: string | null
@@ -104,6 +110,15 @@ export interface Registration {
   accommodation_needed: boolean
   accommodation_notes: string | null
   dietary_needs: string | null
+  /** Which days / dinners this attendee is coming to. */
+  day1_attending: boolean
+  day2_attending: boolean
+  dinner1_attending: boolean
+  dinner2_attending: boolean
+  /** Room type for accommodation (e.g. Single, Twin). */
+  room_type: string | null
+  /** Travel / flight details for this attendee. */
+  travel_notes: string | null
   /** Accommodation arrival/departure for this attendee (may differ from event dates). */
   arrival_date: string | null
   departure_date: string | null
@@ -118,6 +133,34 @@ export interface Registration {
   updated_at: string
   contact?: Contact
   event?: Event
+}
+
+// ─── Run sheet (order of the day) ────────────────────────────
+export interface RunSheetItem {
+  id: string
+  event_id: string
+  day: string | null
+  start_time: string | null
+  title: string | null
+  presenter: string | null
+  location: string | null
+  notes: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+// ─── Budget line items ───────────────────────────────────────
+export interface BudgetItem {
+  id: string
+  event_id: string
+  category: string | null
+  estimated: number | null
+  actual: number | null
+  notes: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 // ─── Emails (Gmail sync + reply tracking) ────────────────────
