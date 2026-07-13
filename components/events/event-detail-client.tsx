@@ -431,7 +431,7 @@ export function EventDetailClient({
       </Card>
 
       {/* Run sheet */}
-      <RunSheetSection eventId={ev.id} initialItems={initialRunSheet} />
+      <RunSheetSection eventId={ev.id} eventName={ev.name} initialItems={initialRunSheet} />
 
       {/* Budget */}
       <BudgetSection eventId={ev.id} initialItems={initialBudget} />

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, ListOrdered } from 'lucide-react'
+import { Plus, Trash2, ListOrdered, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +11,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import type { RunSheetItem } from '@/types'
+
+// Build a CSV (Excel-friendly, UTF-8 BOM) and trigger a download.
+function downloadCSV(filename: string, rows: (string | number)[][]) {
+  const esc = (v: string | number) => {
+    const s = String(v ?? '')
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = rows.map(r => r.map(esc).join(',')).join('\r\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 // Turn a "YYYY-MM-DD" date value into a friendly "10 Jun 2026".
 function formatDay(day: string | null): string {
@@ -47,7 +65,7 @@ const TIME_OPTIONS: { value: string; label: string }[] = (() => {
   return out
 })()
 
-export function RunSheetSection({ eventId, initialItems }: { eventId: string; initialItems: RunSheetItem[] }) {
+export function RunSheetSection({ eventId, eventName, initialItems }: { eventId: string; eventName: string; initialItems: RunSheetItem[] }) {
   const [items, setItems] = useState<RunSheetItem[]>(initialItems)
   const [editing, setEditing] = useState<RunSheetItem | null>(null)
   const [adding, setAdding] = useState(false)
@@ -94,11 +112,26 @@ export function RunSheetSection({ eventId, initialItems }: { eventId: string; in
     setItems(prev => prev.filter(i => i.id !== item.id))
   }
 
+  function exportRunSheet() {
+    const rows: (string | number)[][] = [['Time', 'Date', 'Session / activity', 'Presenter', 'Location', 'Notes']]
+    for (const i of sortedItems) {
+      rows.push([
+        i.start_time ? formatTime(i.start_time) : '',
+        i.day ? formatDay(i.day) : '',
+        i.title ?? '', i.presenter ?? '', i.location ?? '', i.notes ?? '',
+      ])
+    }
+    downloadCSV(`${eventName} - run sheet.csv`, rows)
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base flex items-center gap-1.5"><ListOrdered className="h-4 w-4" /> Run sheet</CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus className="h-4 w-4 mr-1.5" /> Add item</Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={items.length === 0} onClick={exportRunSheet}><Download className="h-4 w-4 mr-1.5" /> Export</Button>
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus className="h-4 w-4 mr-1.5" /> Add item</Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
