@@ -8,29 +8,28 @@ import { Button } from '@/components/ui/button'
 
 interface Task { id: string; text: string; done: boolean }
 
-const KEY = 'crm-quick-tasks'
-
 // A simple to-do / notes box. Saved in this browser only (no dates, no tracking).
-export function QuickTasks() {
+// `storageKey` scopes the list — e.g. one per conference.
+export function QuickTasks({ storageKey }: { storageKey: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [text, setText] = useState('')
   const [loaded, setLoaded] = useState(false)
 
-  // Load saved tasks once, on the client.
+  // Load saved tasks for this key, on the client.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(KEY)
-      if (raw) setTasks(JSON.parse(raw) as Task[])
+      const raw = localStorage.getItem(storageKey)
+      setTasks(raw ? (JSON.parse(raw) as Task[]) : [])
     } catch {
-      /* ignore malformed storage */
+      setTasks([])
     }
     setLoaded(true)
-  }, [])
+  }, [storageKey])
 
   // Save whenever tasks change (but not before the first load).
   useEffect(() => {
-    if (loaded) localStorage.setItem(KEY, JSON.stringify(tasks))
-  }, [tasks, loaded])
+    if (loaded) localStorage.setItem(storageKey, JSON.stringify(tasks))
+  }, [tasks, loaded, storageKey])
 
   function add() {
     const t = text.trim()

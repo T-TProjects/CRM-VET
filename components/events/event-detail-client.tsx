@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast'
 import { RunSheetSection } from '@/components/events/run-sheet-section'
 import { BudgetSection } from '@/components/events/budget-section'
+import { QuickTasks } from '@/components/quick-tasks'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import type { Event, EventStatus, Registration, Contact, RegistrationStatus, RunSheetItem, BudgetItem } from '@/types'
 
@@ -293,6 +294,9 @@ export function EventDetailClient({
           <Button variant="outline" size="sm" className="text-destructive" disabled={busy} onClick={deleteEvent}><Trash2 className="h-4 w-4 mr-1.5" /> Delete</Button>
         </div>
       </div>
+
+      {/* To do & notes for this conference */}
+      <QuickTasks key={ev.id} storageKey={`crm-quick-tasks-event-${ev.id}`} />
 
       {/* Response summary */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
