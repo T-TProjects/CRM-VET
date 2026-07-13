@@ -8,8 +8,36 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import type { RunSheetItem } from '@/types'
+
+const DAY_OPTIONS = ['Day 1', 'Day 2', 'Day 3']
+
+// Turn a 24-hour "HH:MM" value into a friendly "9:00 AM".
+function formatTime(hhmm: string | null): string {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return hhmm || '—'
+  const [hStr, m] = hhmm.split(':')
+  let h = Number(hStr)
+  const ampm = h < 12 ? 'AM' : 'PM'
+  h = h % 12
+  if (h === 0) h = 12
+  return `${h}:${m} ${ampm}`
+}
+
+// Pick-list of times (15-minute steps, 6:00 AM – 10:00 PM). Values are
+// sortable 24-hour "HH:MM" so the run sheet lists in order.
+const TIME_OPTIONS: { value: string; label: string }[] = (() => {
+  const out: { value: string; label: string }[] = []
+  for (let h = 6; h <= 22; h++) {
+    for (const m of [0, 15, 30, 45]) {
+      if (h === 22 && m > 0) break
+      const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      out.push({ value, label: formatTime(value) })
+    }
+  }
+  return out
+})()
 
 export function RunSheetSection({ eventId, initialItems }: { eventId: string; initialItems: RunSheetItem[] }) {
   const [items, setItems] = useState<RunSheetItem[]>(initialItems)
@@ -17,6 +45,13 @@ export function RunSheetSection({ eventId, initialItems }: { eventId: string; in
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const { toast } = useToast()
+
+  // Order of the day: sort by Day, then Time.
+  const sortedItems = [...items].sort((a, b) => {
+    const d = (a.day ?? '').localeCompare(b.day ?? '')
+    if (d !== 0) return d
+    return (a.start_time ?? '').localeCompare(b.start_time ?? '')
+  })
 
   async function addItem(body: Partial<RunSheetItem>) {
     setBusy(true)
@@ -73,9 +108,9 @@ export function RunSheetSection({ eventId, initialItems }: { eventId: string; in
           <TableBody>
             {items.length === 0 ? (
               <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No run sheet items yet. Add one to build the order of the day.</TableCell></TableRow>
-            ) : items.map(i => (
+            ) : sortedItems.map(i => (
               <TableRow key={i.id}>
-                <TableCell>{i.start_time || '—'}</TableCell>
+                <TableCell>{formatTime(i.start_time)}</TableCell>
                 <TableCell>{i.day || '—'}</TableCell>
                 <TableCell className="font-medium">{i.title || '—'}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{i.presenter || '—'}</TableCell>
@@ -137,8 +172,24 @@ function ItemDialog({
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Time</Label><Input value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })} placeholder="e.g. 9:00am" /></div>
-            <div className="space-y-1.5"><Label>Day</Label><Input value={form.day} onChange={e => setForm({ ...form, day: e.target.value })} placeholder="e.g. Day 1" /></div>
+            <div className="space-y-1.5">
+              <Label>Time</Label>
+              <Select value={form.start_time} onValueChange={v => setForm({ ...form, start_time: v })}>
+                <SelectTrigger><SelectValue placeholder="Choose time" /></SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Day</Label>
+              <Select value={form.day} onValueChange={v => setForm({ ...form, day: v })}>
+                <SelectTrigger><SelectValue placeholder="Choose day" /></SelectTrigger>
+                <SelectContent>
+                  {DAY_OPTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1.5"><Label>Session / activity</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-3">
