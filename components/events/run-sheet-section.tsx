@@ -12,7 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast'
 import type { RunSheetItem } from '@/types'
 
-const DAY_OPTIONS = ['Day 1', 'Day 2', 'Day 3']
+// Turn a "YYYY-MM-DD" date value into a friendly "10 Jun 2026".
+function formatDay(day: string | null): string {
+  if (!day) return '—'
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const [y, m, d] = day.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  return day
+}
 
 // Turn a 24-hour "HH:MM" value into a friendly "9:00 AM".
 function formatTime(hhmm: string | null): string {
@@ -97,7 +105,7 @@ export function RunSheetSection({ eventId, initialItems }: { eventId: string; in
           <TableHeader>
             <TableRow>
               <TableHead className="w-[90px]">Time</TableHead>
-              <TableHead className="w-[80px]">Day</TableHead>
+              <TableHead className="w-[110px]">Date</TableHead>
               <TableHead>Session / activity</TableHead>
               <TableHead>Presenter</TableHead>
               <TableHead>Location</TableHead>
@@ -111,7 +119,7 @@ export function RunSheetSection({ eventId, initialItems }: { eventId: string; in
             ) : sortedItems.map(i => (
               <TableRow key={i.id}>
                 <TableCell>{formatTime(i.start_time)}</TableCell>
-                <TableCell>{i.day || '—'}</TableCell>
+                <TableCell>{formatDay(i.day)}</TableCell>
                 <TableCell className="font-medium">{i.title || '—'}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{i.presenter || '—'}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{i.location || '—'}</TableCell>
@@ -182,13 +190,8 @@ function ItemDialog({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Day</Label>
-              <Select value={form.day} onValueChange={v => setForm({ ...form, day: v })}>
-                <SelectTrigger><SelectValue placeholder="Choose day" /></SelectTrigger>
-                <SelectContent>
-                  {DAY_OPTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Date</Label>
+              <Input type="date" value={form.day} onChange={e => setForm({ ...form, day: e.target.value })} />
             </div>
           </div>
           <div className="space-y-1.5"><Label>Session / activity</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
