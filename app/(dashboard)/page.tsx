@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Users, CalendarDays, MailQuestion, UserCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { QuickTasks } from '@/components/quick-tasks'
 import { formatDate } from '@/lib/utils'
 import type { Interaction } from '@/types'
 
@@ -53,6 +54,8 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="text-sm text-muted-foreground">Relationships, conferences, and follow-ups at a glance.</p>
       </div>
+
+      <QuickTasks />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map(({ key, label, icon: Icon, href }) => (
