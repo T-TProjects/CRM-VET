@@ -24,20 +24,28 @@ export interface ParsedAttendee {
   notes: string | null
 }
 
-// Parse a date the way NZ spreadsheets write them (day first), plus ISO.
-function parseDateNZ(s: string): string | null {
+export type DateOrder = 'dmy' | 'mdy'
+
+// Parse a numeric date. `order` says which way round ambiguous dates are:
+// 'dmy' = NZ day-first, 'mdy' = US month-first (how Microsoft Forms exports).
+// A number over 12 settles it either way regardless of `order`.
+function parseDateFlexible(s: string, order: DateOrder): string | null {
   const t = s.trim()
   if (!t) return null
   let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (m) return `${m[1]}-${m[2]}-${m[3]}`
   m = t.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/)
   if (m) {
-    let day = Number(m[1])
-    let month = Number(m[2])
+    const a = Number(m[1])
+    const b = Number(m[2])
     let year = Number(m[3])
     if (year < 100) year += 2000
-    // If the middle number can't be a month, the sheet used month-first.
-    if (month > 12 && day <= 12) { const tmp = day; day = month; month = tmp }
+    let day: number
+    let month: number
+    if (a > 12 && b <= 12) { day = a; month = b }
+    else if (b > 12 && a <= 12) { day = b; month = a }
+    else if (order === 'mdy') { month = a; day = b }
+    else { day = a; month = b }
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
@@ -45,18 +53,33 @@ function parseDateNZ(s: string): string | null {
   return null
 }
 
+// "2026-09-08" → "08 Sep 2026" for the preview.
+function friendlyDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 interface ParseResult {
   people: ParsedAttendee[]
   skipped: number
   missingColumns: string[]
   noHeader: boolean
+  /** Date order worked out from the data itself (null = couldn't tell). */
+  detectedOrder: DateOrder | null
+  /** Date order actually used for this parse. */
+  usedOrder: DateOrder
+  /** How many rows had accommodation dates. */
+  dateCount: number
 }
 
 // Parse rows copied from the Microsoft Forms Excel export (tab-separated,
 // heading row included). Column matching is by keyword so extra columns
 // (ID, Start time, etc.) are ignored.
-export function parseFormSpreadsheet(text: string): ParseResult {
-  const empty: ParseResult = { people: [], skipped: 0, missingColumns: [], noHeader: false }
+export function parseFormSpreadsheet(text: string, dateOrder?: DateOrder): ParseResult {
+  const empty: ParseResult = {
+    people: [], skipped: 0, missingColumns: [], noHeader: false,
+    detectedOrder: null, usedOrder: dateOrder ?? 'mdy', dateCount: 0,
+  }
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== '')
   if (lines.length === 0) return empty
 
@@ -92,13 +115,34 @@ export function parseFormSpreadsheet(text: string): ParseResult {
   if (col.days === -1) missingColumns.push('Days attending')
 
   const get = (cells: string[], i: number) => (i >= 0 && i < cells.length ? cells[i].trim() : '')
+
+  // Work out whether dates are day-first (NZ) or month-first (the US style
+  // Microsoft Forms exports use): any date with a number over 12 settles it.
+  let detected: DateOrder | null = null
+  for (const line of lines.slice(1)) {
+    const cells = line.split('\t')
+    for (const idx of [col.checkin, col.checkout]) {
+      const m = get(cells, idx).match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/)
+      if (!m) continue
+      const a = Number(m[1])
+      const b = Number(m[2])
+      if (a > 12 && b <= 12) detected = 'dmy'
+      else if (b > 12 && a <= 12) detected = 'mdy'
+      if (detected) break
+    }
+    if (detected) break
+  }
+  const usedOrder: DateOrder = dateOrder ?? detected ?? 'mdy'
+
   const people: ParsedAttendee[] = []
   let skipped = 0
+  let dateCount = 0
 
   for (const line of lines.slice(1)) {
     const cells = line.split('\t')
     const name = get(cells, col.name)
     if (!name) { skipped++; continue }
+    if (get(cells, col.checkin) || get(cells, col.checkout)) dateCount++
     const days = get(cells, col.days).toLowerCase()
     const dinner = get(cells, col.dinner).toLowerCase()
     const accomAns = get(cells, col.accom).toLowerCase()
@@ -113,13 +157,13 @@ export function parseFormSpreadsheet(text: string): ParseResult {
       dinner1: /both/.test(dinner) || /night\s*1|dinner\s*1/.test(dinner) || /^y(es)?\b/.test(dinner),
       dinner2: /both/.test(dinner) || /night\s*2|dinner\s*2/.test(dinner),
       accommodation_needed: /^y(es)?\b/.test(accomAns),
-      arrival_date: parseDateNZ(get(cells, col.checkin)),
-      departure_date: parseDateNZ(get(cells, col.checkout)),
+      arrival_date: parseDateFlexible(get(cells, col.checkin), usedOrder),
+      departure_date: parseDateFlexible(get(cells, col.checkout), usedOrder),
       travel: get(cells, col.travel) || null,
       notes: get(cells, col.notes) || null,
     })
   }
-  return { people, skipped, missingColumns, noHeader: false }
+  return { people, skipped, missingColumns, noHeader: false, detectedOrder: detected, usedOrder, dateCount }
 }
 
 function daysLabel(p: ParsedAttendee): string {
@@ -144,9 +188,10 @@ export function ImportFormDialog({
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dateOrder, setDateOrder] = useState<DateOrder | null>(null)
   const { toast } = useToast()
 
-  const parsed = useMemo(() => parseFormSpreadsheet(text), [text])
+  const parsed = useMemo(() => parseFormSpreadsheet(text, dateOrder ?? undefined), [text, dateOrder])
 
   async function doImport() {
     setBusy(true)
@@ -191,6 +236,27 @@ export function ImportFormDialog({
             </p>
           )}
 
+          {parsed.dateCount > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Dates in the paste are:</span>
+              <button
+                type="button"
+                onClick={() => setDateOrder('dmy')}
+                className={`rounded-full border px-2.5 py-1 ${parsed.usedOrder === 'dmy' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}
+              >
+                Day / Month (NZ)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateOrder('mdy')}
+                className={`rounded-full border px-2.5 py-1 ${parsed.usedOrder === 'mdy' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}
+              >
+                Month / Day (US)
+              </button>
+              <span className="text-muted-foreground">— check the accommodation dates below look right, and flip this if not.</span>
+            </div>
+          )}
+
           {parsed.people.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">
@@ -221,7 +287,7 @@ export function ImportFormDialog({
                         <TableCell className="text-sm">{p.dietary ?? '—'}</TableCell>
                         <TableCell className="text-sm">
                           {p.accommodation_needed
-                            ? `Yes${p.arrival_date && p.departure_date ? ` (${p.arrival_date} → ${p.departure_date})` : ''}`
+                            ? `Yes${p.arrival_date && p.departure_date ? ` (${friendlyDate(p.arrival_date)} → ${friendlyDate(p.departure_date)})` : ''}`
                             : '—'}
                         </TableCell>
                       </TableRow>
