@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, CalendarDays, MapPin, FileText, Plus, Send, Trash2,
-  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star, Download,
+  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star, Download, FileSpreadsheet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast'
 import { RunSheetSection } from '@/components/events/run-sheet-section'
 import { BudgetSection } from '@/components/events/budget-section'
+import { ImportFormDialog } from '@/components/events/import-form-dialog'
 import { QuickTasks } from '@/components/quick-tasks'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import type { Event, EventStatus, Registration, Contact, RegistrationStatus, RunSheetItem, BudgetItem } from '@/types'
@@ -51,6 +52,7 @@ export function EventDetailClient({
   const [attendeeSearch, setAttendeeSearch] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulkText, setBulkText] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
   const { toast } = useToast()
 
   const summary = useMemo(() => {
@@ -101,6 +103,15 @@ export function EventDetailClient({
 
   function patchLocal(updated: Registration) {
     setRegs(prev => prev.map(r => (r.id === updated.id ? { ...r, ...updated, contact: r.contact } : r)))
+  }
+
+  // Merge imported registrations: update existing rows, append new ones.
+  function mergeRegs(added: Registration[]) {
+    setRegs(prev => {
+      const map = new Map(prev.map(r => [r.id, r]))
+      for (const r of added) map.set(r.id, r)
+      return Array.from(map.values())
+    })
   }
 
   async function addAttendee(contactId: string) {
@@ -336,6 +347,7 @@ export function EventDetailClient({
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => { setAttendeeSearch(''); setAddOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add attendee</Button>
         <Button variant="outline" onClick={() => { setBulkText(''); setBulkOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add multiple</Button>
+        <Button variant="outline" onClick={() => setImportOpen(true)}><FileSpreadsheet className="h-4 w-4 mr-1.5" /> Import from form</Button>
         <Button variant="outline" disabled={busy || invitedIds.length === 0} onClick={() => notify('event_invite', invitedIds)}>
           <Send className="h-4 w-4 mr-1.5" /> Send invite to no-response ({invitedIds.length})
         </Button>
@@ -506,6 +518,15 @@ export function EventDetailClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Import from form dialog */}
+      {importOpen && (
+        <ImportFormDialog
+          eventId={ev.id}
+          onClose={() => setImportOpen(false)}
+          onImported={(rs) => { mergeRegs(rs); setImportOpen(false) }}
+        />
+      )}
 
       {/* Edit registration dialog */}
       {editing && (
