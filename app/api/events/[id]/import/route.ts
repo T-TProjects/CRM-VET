@@ -42,25 +42,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!name) continue
     const email = (p.email ?? '')?.trim() || null
 
-    // Find an existing contact: by email first, then by name.
+    // Find an existing contact by NAME. Email alone is deliberately not a
+    // match: clinics often share one address (e.g. reception@...), so two
+    // people can legitimately have the same email. And if the same name
+    // exists at a different clinic, treat them as different people.
     let existing: { id: string; organization: string | null; dietary_needs: string | null; email: string | null } | null = null
-    if (email) {
-      const { data } = await supabase
-        .from('contacts')
-        .select('id, organization, dietary_needs, email')
-        .ilike('email', email)
-        .limit(1)
-        .maybeSingle()
-      existing = data ?? null
-    }
-    if (!existing) {
-      const { data } = await supabase
-        .from('contacts')
-        .select('id, organization, dietary_needs, email')
-        .ilike('name', name)
-        .limit(1)
-        .maybeSingle()
-      existing = data ?? null
+    const { data: candidates } = await supabase
+      .from('contacts')
+      .select('id, organization, dietary_needs, email')
+      .ilike('name', name)
+      .limit(5)
+    const clinic = (p.clinic ?? '').trim().toLowerCase()
+    for (const c of candidates ?? []) {
+      if (!clinic || !c.organization || c.organization.trim().toLowerCase() === clinic) {
+        existing = c
+        break
+      }
     }
 
     let contactId: string | null = null
