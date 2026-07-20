@@ -259,14 +259,14 @@ export function EventDetailClient({
     const guests = regs.filter(r => r.accommodation_needed)
     if (guests.length === 0) { toast({ title: 'No one needs accommodation yet' }); return }
     const rows: (string | number)[][] = [[
-      'Clinic', 'Guest name', 'Check-in', 'Check-out', 'Nights', 'Dietary', 'Notes',
+      'Clinic', 'Guest name', 'Check-in', 'Check-out', 'Nights', 'Dietary',
     ]]
     for (const r of guests) {
       rows.push([
         r.contact?.organization ?? '', r.contact?.name ?? '',
         r.arrival_date ? formatDate(r.arrival_date) : '', r.departure_date ? formatDate(r.departure_date) : '',
         nightsBetween(r.arrival_date, r.departure_date),
-        r.dietary_needs ?? '', r.accommodation_notes ?? '',
+        r.dietary_needs ?? '',
       ])
     }
     downloadCSV(`${ev.name} - hotel list.csv`, rows)
@@ -420,7 +420,6 @@ export function EventDetailClient({
                                 {nightsBetween(r.arrival_date, r.departure_date) && ` (${nightsBetween(r.arrival_date, r.departure_date)}n)`}
                               </span>
                             )}
-                            {r.accommodation_notes && <span className="mt-0.5 block text-xs text-muted-foreground">{r.accommodation_notes}</span>}
                           </>
                         )}
                         {r.travel_notes && (
@@ -717,7 +716,6 @@ function EditRegistrationDialog({
   reg, onClose, onSave,
 }: { reg: Registration; onClose: () => void; onSave: (body: Partial<Registration>) => Promise<void> }) {
   const [accNeeded, setAccNeeded] = useState(reg.accommodation_needed)
-  const [accNotes, setAccNotes] = useState(reg.accommodation_notes ?? '')
   const [arrival, setArrival] = useState(reg.arrival_date ?? '')
   const [departure, setDeparture] = useState(reg.departure_date ?? '')
   const [dietary, setDietary] = useState(reg.dietary_needs ?? '')
@@ -738,7 +736,6 @@ function EditRegistrationDialog({
       dinner1_attending: dinner1,
       dinner2_attending: dinner2,
       accommodation_needed: accNeeded,
-      accommodation_notes: accNotes || null,
       arrival_date: arrival || null,
       departure_date: departure || null,
       dietary_needs: dietary || null,
@@ -772,7 +769,6 @@ function EditRegistrationDialog({
             <div className="space-y-1.5"><Label>Arrival</Label><Input type="date" value={arrival} onChange={e => setArrival(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Departure</Label><Input type="date" value={departure} onChange={e => setDeparture(e.target.value)} /></div>
           </div>
-          <div className="space-y-1.5"><Label>Accommodation notes</Label><Input value={accNotes} onChange={e => setAccNotes(e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Travel / flights</Label><Input value={travel} onChange={e => setTravel(e.target.value)} placeholder="e.g. arrives 4:55pm, departs 5:50pm" /></div>
           <div className="space-y-1.5"><Label>Notes</Label><textarea value={responseNotes} onChange={e => setResponseNotes(e.target.value)} placeholder="Notes about this person for this event" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" /></div>
           <label className="flex items-center gap-2 text-sm">
