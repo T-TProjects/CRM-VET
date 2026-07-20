@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, CalendarDays, MapPin, FileText, Plus, Send, Trash2,
-  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star, Download, FileSpreadsheet,
+  CheckCircle2, Clock, XCircle, Bed, Utensils, Pencil, Search, Star, Download, FileSpreadsheet, Plane,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -373,7 +373,7 @@ export function EventDetailClient({
               <TableRow>
                 <TableHead>Attendee</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Accommodation</TableHead>
+                <TableHead>Accommodation &amp; travel</TableHead>
                 <TableHead>Dietary</TableHead>
                 <TableHead>Notified</TableHead>
                 <TableHead>Replied</TableHead>
@@ -409,14 +409,22 @@ export function EventDetailClient({
                     </Select>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {r.accommodation_needed ? (
+                    {(r.accommodation_needed || r.travel_notes) ? (
                       <span className="text-foreground">
-                        <span className="flex items-center gap-1.5"><Bed className="h-3.5 w-3.5" /> {r.accommodation_notes || 'Needed'}</span>
-                        {(r.arrival_date || r.departure_date) && (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">
-                            {r.arrival_date ? formatDate(r.arrival_date) : '?'} → {r.departure_date ? formatDate(r.departure_date) : '?'}
-                            {nightsBetween(r.arrival_date, r.departure_date) && ` (${nightsBetween(r.arrival_date, r.departure_date)}n)`}
-                          </span>
+                        {r.accommodation_needed && (
+                          <>
+                            <span className="flex items-center gap-1.5"><Bed className="h-3.5 w-3.5" /> Needed</span>
+                            {(r.arrival_date || r.departure_date) && (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {r.arrival_date ? formatDate(r.arrival_date) : '?'} → {r.departure_date ? formatDate(r.departure_date) : '?'}
+                                {nightsBetween(r.arrival_date, r.departure_date) && ` (${nightsBetween(r.arrival_date, r.departure_date)}n)`}
+                              </span>
+                            )}
+                            {r.accommodation_notes && <span className="mt-0.5 block text-xs text-muted-foreground">{r.accommodation_notes}</span>}
+                          </>
+                        )}
+                        {r.travel_notes && (
+                          <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"><Plane className="h-3.5 w-3.5" /> {r.travel_notes}</span>
                         )}
                       </span>
                     ) : '—'}
