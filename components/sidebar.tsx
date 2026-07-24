@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { LayoutDashboard, Users, CalendarDays, Bell, Mail, Settings, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarDays, Bell, Mail, Mic, Settings, LogOut, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { href: '/contacts', label: 'Contacts', icon: Users },
   { href: '/events', label: 'Conferences', icon: CalendarDays },
   { href: '/reminders', label: 'Reminders', icon: Bell, showBadge: true },
+  { href: '/meetings', label: 'Board meetings', icon: Mic },
   { href: '/emails', label: 'Emails', icon: Mail },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users, CalendarDays, MailQuestion, UserCheck } from 'lucide-react'
+import { Users, CalendarDays, MailQuestion, UserCheck, Mic } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
@@ -69,6 +69,20 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      <Link href="/meetings">
+        <Card className="transition-colors hover:bg-accent/40">
+          <CardContent className="flex items-center gap-4 py-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Mic className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Board meeting recorder</p>
+              <p className="text-xs text-muted-foreground">Record a meeting and get drafted minutes.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
 
       <Card>
         <CardHeader>

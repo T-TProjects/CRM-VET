@@ -202,6 +202,73 @@ export interface EmailTemplate {
   updated_at: string
 }
 
+// ─── Board meeting recorder ──────────────────────────────────
+export type MeetingStatus =
+  | 'draft'
+  | 'transcribing'
+  | 'transcribed'
+  | 'drafting'
+  | 'ready'
+  | 'failed'
+
+/** One speaker-labelled segment of the transcript. */
+export interface Utterance {
+  speaker: string
+  text: string
+  /** milliseconds from the start of the recording */
+  start: number
+  end: number
+}
+
+/** A single agreed action item coming out of the meeting. */
+export interface ActionItem {
+  action: string
+  owner: string | null
+  due: string | null
+}
+
+/** A recorded decision or motion. */
+export interface Decision {
+  topic: string
+  decision: string
+  /** e.g. "Carried unanimously", "3 for, 1 against" */
+  outcome: string | null
+}
+
+/** The structured minutes drafted from the transcript. */
+export interface MeetingMinutes {
+  title: string
+  date: string | null
+  attendees: string[]
+  apologies: string[]
+  summary: string
+  agenda_items: { topic: string; discussion: string }[]
+  decisions: Decision[]
+  action_items: ActionItem[]
+  next_meeting: string | null
+}
+
+export interface Meeting {
+  id: string
+  title: string
+  meeting_date: string | null
+  location: string | null
+  event_id: string | null
+  attendees: string[]
+  status: MeetingStatus
+  audio_path: string | null
+  assembly_id: string | null
+  transcript: string | null
+  utterances: Utterance[] | null
+  minutes: MeetingMinutes | null
+  duration_seconds: number | null
+  error: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  event?: Event
+}
+
 // ─── Dashboard stats ─────────────────────────────────────────
 export interface CRMStats {
   totalContacts: number
