@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
 import { Recorder } from '@/components/meetings/recorder'
+import { downloadMinutesDocx } from '@/components/meetings/minutes-docx'
 import type { Meeting, MeetingMinutes } from '@/types'
 
 type Flow = 'idle' | 'uploading' | 'transcribing' | 'drafting'
@@ -175,6 +176,19 @@ export function MeetingDetailClient({ initialMeeting }: { initialMeeting: Meetin
     URL.revokeObjectURL(url)
   }
 
+  const [makingDoc, setMakingDoc] = useState(false)
+  async function downloadDocx() {
+    if (!minutes) return
+    setMakingDoc(true)
+    try {
+      await downloadMinutesDocx(meeting.title.replace(/[^\w]+/g, '-'), minutes)
+    } catch {
+      toast({ title: 'Could not create the Word file', variant: 'destructive' })
+    } finally {
+      setMakingDoc(false)
+    }
+  }
+
   const busy = flow !== 'idle'
   const statusLabel =
     flow === 'uploading'
@@ -261,8 +275,12 @@ export function MeetingDetailClient({ initialMeeting }: { initialMeeting: Meetin
               <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(minutesToText(minutes)); toast({ title: 'Copied' }) }}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
               </Button>
+              <Button size="sm" onClick={downloadDocx} disabled={makingDoc}>
+                {makingDoc ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5" />}
+                Word
+              </Button>
               <Button variant="outline" size="sm" onClick={downloadMinutes}>
-                <Download className="mr-1.5 h-3.5 w-3.5" /> Download
+                <Download className="mr-1.5 h-3.5 w-3.5" /> .txt
               </Button>
             </div>
           </CardHeader>
