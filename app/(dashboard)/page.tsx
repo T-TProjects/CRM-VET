@@ -3,6 +3,7 @@ import { Users, CalendarDays, MailQuestion, UserCheck, Mic } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
+import { DashboardTodo } from '@/components/dashboard-todo'
 import type { Interaction } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -83,6 +84,8 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </Link>
+
+      <DashboardTodo />
 
       <Card>
         <CardHeader>
