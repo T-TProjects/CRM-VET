@@ -43,6 +43,10 @@ export function QuickTasks({ storageKey }: { storageKey: string }) {
     setTasks(prev => prev.map(x => (x.id === id ? { ...x, done: !x.done } : x)))
   }
 
+  function edit(id: string, value: string) {
+    setTasks(prev => prev.map(x => (x.id === id ? { ...x, text: value } : x)))
+  }
+
   function remove(id: string) {
     setTasks(prev => prev.filter(x => x.id !== id))
   }
@@ -64,7 +68,11 @@ export function QuickTasks({ storageKey }: { storageKey: string }) {
             {tasks.map(t => (
               <li key={t.id} className="flex items-center gap-2 group">
                 <input type="checkbox" checked={t.done} onChange={() => toggle(t.id)} className="h-4 w-4 shrink-0" />
-                <span className={`flex-1 text-sm ${t.done ? 'line-through text-muted-foreground' : ''}`}>{t.text}</span>
+                <Input
+                  value={t.text}
+                  onChange={e => edit(t.id, e.target.value)}
+                  className={`flex-1 ${t.done ? 'line-through text-muted-foreground' : ''}`}
+                />
                 <button
                   type="button"
                   onClick={() => remove(t.id)}
