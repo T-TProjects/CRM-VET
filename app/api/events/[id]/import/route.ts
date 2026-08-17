@@ -30,12 +30,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const body = await req.json()
   const people: ImportPerson[] = Array.isArray(body?.people) ? body.people : []
+  // When false (the default), people already on the event are left exactly
+  // as they are — so manual edits are never overwritten.
+  const updateExisting: boolean = body?.updateExisting === true
   if (people.length === 0) {
     return NextResponse.json({ error: 'No attendees to import.' }, { status: 400 })
   }
 
   const registrations: unknown[] = []
   let failed = 0
+  let added = 0
+  let updated = 0
+  let skippedExisting = 0
 
   for (const p of people) {
     const name = (p.name ?? '').trim()
@@ -89,6 +95,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       contactId = created.id
     }
 
+    // Is this person already on the event? If so, and we're not updating,
+    // leave their (possibly hand-edited) registration exactly as it is.
+    const { data: existingReg } = await supabase
+      .from('registrations')
+      .select('id')
+      .eq('event_id', params.id)
+      .eq('contact_id', contactId)
+      .maybeSingle()
+    if (existingReg && !updateExisting) { skippedExisting++; continue }
+
     // Create or update the registration with everything from the form.
     const { data: reg, error: regErr } = await supabase
       .from('registrations')
@@ -112,8 +128,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .single()
 
     if (regErr || !reg) { failed++; continue }
+    if (existingReg) updated++; else added++
     registrations.push(reg)
   }
 
-  return NextResponse.json({ registrations, imported: registrations.length, failed }, { status: 201 })
+  return NextResponse.json(
+    { registrations, imported: registrations.length, added, updated, skippedExisting, failed },
+    { status: 201 },
+  )
 }

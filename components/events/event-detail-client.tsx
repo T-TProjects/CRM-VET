@@ -530,6 +530,7 @@ export function EventDetailClient({
       {importOpen && (
         <ImportFormDialog
           eventId={ev.id}
+          existingNames={regs.map(r => r.contact?.name ?? '').filter(Boolean)}
           onClose={() => setImportOpen(false)}
           onImported={(rs) => { mergeRegs(rs); setImportOpen(false) }}
         />

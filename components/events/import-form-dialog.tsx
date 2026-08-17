@@ -180,25 +180,33 @@ function dinnerLabel(p: ParsedAttendee): string {
 }
 
 export function ImportFormDialog({
-  eventId, onClose, onImported,
+  eventId, existingNames, onClose, onImported,
 }: {
   eventId: string
+  existingNames: string[]
   onClose: () => void
   onImported: (regs: Registration[]) => void
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [dateOrder, setDateOrder] = useState<DateOrder | null>(null)
+  const [updateExisting, setUpdateExisting] = useState(false)
   const { toast } = useToast()
 
   const parsed = useMemo(() => parseFormSpreadsheet(text, dateOrder ?? undefined), [text, dateOrder])
+
+  const existingSet = useMemo(() => new Set(existingNames.map(n => n.trim().toLowerCase())), [existingNames])
+  const isExisting = (p: ParsedAttendee) => existingSet.has(p.name.trim().toLowerCase())
+  const existingCount = parsed.people.filter(isExisting).length
+  const newCount = parsed.people.length - existingCount
+  const willChange = newCount + (updateExisting ? existingCount : 0)
 
   async function doImport() {
     setBusy(true)
     const res = await fetch(`/api/events/${eventId}/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ people: parsed.people }),
+      body: JSON.stringify({ people: parsed.people, updateExisting }),
     })
     const json = await res.json()
     setBusy(false)
@@ -207,7 +215,11 @@ export function ImportFormDialog({
       return
     }
     onImported((json.registrations ?? []) as Registration[])
-    toast({ title: `Imported ${json.imported} attendee${json.imported === 1 ? '' : 's'}` })
+    const parts: string[] = []
+    if (json.added) parts.push(`added ${json.added}`)
+    if (json.updated) parts.push(`updated ${json.updated}`)
+    if (json.skippedExisting) parts.push(`left ${json.skippedExisting} unchanged`)
+    toast({ title: parts.length > 0 ? `Import done — ${parts.join(', ')}` : 'Nothing to import' })
   }
 
   const previewRows = parsed.people.slice(0, 8)
@@ -260,7 +272,7 @@ export function ImportFormDialog({
           {parsed.people.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">
-                Found {parsed.people.length} attendee{parsed.people.length === 1 ? '' : 's'}
+                Found {parsed.people.length} attendee{parsed.people.length === 1 ? '' : 's'} — {newCount} new{existingCount > 0 ? `, ${existingCount} already on the event` : ''}
                 {parsed.skipped > 0 ? ` (${parsed.skipped} row${parsed.skipped === 1 ? '' : 's'} skipped — no name)` : ''}:
               </p>
               <div className="rounded-md border overflow-x-auto">
@@ -268,6 +280,7 @@ export function ImportFormDialog({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead></TableHead>
                       <TableHead>Clinic</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Days</TableHead>
@@ -280,6 +293,11 @@ export function ImportFormDialog({
                     {previewRows.map((p, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium text-sm">{p.name}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {isExisting(p)
+                            ? <span className="text-xs text-muted-foreground">On event</span>
+                            : <span className="text-xs font-medium text-emerald-600">New</span>}
+                        </TableCell>
                         <TableCell className="text-sm">{p.clinic ?? '—'}</TableCell>
                         <TableCell className="text-sm">{p.email ?? '—'}</TableCell>
                         <TableCell className="text-sm">{daysLabel(p)}</TableCell>
@@ -304,13 +322,25 @@ export function ImportFormDialog({
                   those details will be left blank.
                 </p>
               )}
+
+              {existingCount > 0 && (
+                <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
+                  <input type="checkbox" checked={updateExisting} onChange={e => setUpdateExisting(e.target.checked)} className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    Also update the {existingCount} {existingCount === 1 ? 'person' : 'people'} already on this event
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      Off by default. Leave this unticked to keep any manual changes you&rsquo;ve made — only the {newCount} new {newCount === 1 ? 'person' : 'people'} will be added.
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={doImport} disabled={busy || parsed.people.length === 0}>
-            {busy ? 'Importing…' : `Import ${parsed.people.length || ''} attendee${parsed.people.length === 1 ? '' : 's'}`}
+          <Button onClick={doImport} disabled={busy || willChange === 0}>
+            {busy ? 'Importing…' : `Import ${willChange || ''} attendee${willChange === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>
