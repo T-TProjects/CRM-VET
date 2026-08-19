@@ -10,6 +10,11 @@ export function templateVars(contact: Contact, event: Event): Record<string, str
     event_location: event.location ?? '',
     event_date: event.starts_at ? formatDate(event.starts_at) : 'TBC',
     agenda_url: event.agenda_url ?? '',
+    // Named document links, one per line: "Agenda: https://…"
+    documents: (event.documents ?? [])
+      .filter(d => d && d.url && d.url.trim())
+      .map(d => (d.label && d.label.trim() ? `${d.label.trim()}: ${d.url.trim()}` : d.url.trim()))
+      .join('\n'),
   }
 }
 

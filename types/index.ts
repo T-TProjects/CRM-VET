@@ -70,6 +70,12 @@ export interface Reminder {
 // ─── Events (conferences) ────────────────────────────────────
 export type EventStatus = 'draft' | 'upcoming' | 'active' | 'completed' | 'cancelled'
 
+/** A named document link attached to an event (e.g. Agenda, Pre-reading). */
+export interface EventDocument {
+  label: string
+  url: string
+}
+
 export interface Event {
   id: string
   name: string
@@ -86,6 +92,8 @@ export interface Event {
   dinner_venue: string | null
   /** Catering contact (name / phone / email). */
   catering_contact: string | null
+  /** Named document links shared with attendees (e.g. Agenda, Pre-reading). */
+  documents: EventDocument[]
   /** Coordinator who supplies the attendee list for this event. */
   key_contact_id: string | null
   created_by: string | null

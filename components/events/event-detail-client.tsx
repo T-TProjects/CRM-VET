@@ -21,7 +21,7 @@ import { BudgetSection } from '@/components/events/budget-section'
 import { ImportFormDialog } from '@/components/events/import-form-dialog'
 import { QuickTasks } from '@/components/quick-tasks'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import type { Event, EventStatus, Registration, Contact, RegistrationStatus, RunSheetItem, BudgetItem } from '@/types'
+import type { Event, EventStatus, Registration, Contact, RegistrationStatus, RunSheetItem, BudgetItem, EventDocument } from '@/types'
 
 const STATUS_VARIANT: Record<RegistrationStatus, 'success' | 'secondary' | 'outline' | 'warning' | 'destructive'> = {
   signed_up: 'success', invited: 'warning', declined: 'destructive', attended: 'success', no_show: 'outline',
@@ -296,6 +296,9 @@ export function EventDetailClient({
             )}
             {ev.location && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {ev.location}</span>}
             {ev.agenda_url && <a href={ev.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-foreground hover:underline"><FileText className="h-4 w-4" /> Agenda</a>}
+            {(ev.documents ?? []).filter(d => d.url).map((d, i) => (
+              <a key={i} href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-foreground hover:underline"><FileText className="h-4 w-4" /> {d.label || 'Document'}</a>
+            ))}
             {keyContact && <span className="flex items-center gap-1.5"><Star className="h-4 w-4" /> Key contact: {keyContact.name}</span>}
           </div>
         </div>
@@ -570,6 +573,7 @@ function EditEventDialog({
     key_contact_id: event.key_contact_id ?? '',
     description: event.description ?? '',
   })
+  const [docs, setDocs] = useState<EventDocument[]>(event.documents ?? [])
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -587,6 +591,9 @@ function EditEventDialog({
       status: form.status,
       key_contact_id: form.key_contact_id || null,
       description: form.description || null,
+      documents: docs
+        .map(d => ({ label: d.label.trim(), url: d.url.trim() }))
+        .filter(d => d.url),
     })
     setSaving(false)
     if (ok) onClose()
@@ -609,6 +616,18 @@ function EditEventDialog({
             <div className="space-y-1.5"><Label>Ends</Label><Input type="date" value={form.ends_at} onChange={e => setForm({ ...form, ends_at: e.target.value })} /></div>
           </div>
           <div className="space-y-1.5"><Label>Agenda link</Label><Input value={form.agenda_url} onChange={e => setForm({ ...form, agenda_url: e.target.value })} placeholder="https://…" /></div>
+          <div className="space-y-1.5">
+            <Label>Documents (links for emails)</Label>
+            <p className="text-xs text-muted-foreground">Paste a share link for each document (e.g. from OneDrive: Share → Copy link). Give each a short name. These can be included in emails with {'{{documents}}'}.</p>
+            {docs.map((d, i) => (
+              <div key={i} className="flex gap-2">
+                <Input placeholder="Name (e.g. Agenda)" value={d.label} onChange={e => setDocs(docs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} className="w-1/3" />
+                <Input placeholder="https://…" value={d.url} onChange={e => setDocs(docs.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} />
+                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-destructive" onClick={() => setDocs(docs.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={() => setDocs([...docs, { label: '', url: '' }])}><Plus className="h-4 w-4 mr-1.5" /> Add document</Button>
+          </div>
           <div className="space-y-1.5">
             <Label>Status</Label>
             <Select value={form.status} onValueChange={(v: EventStatus) => setForm({ ...form, status: v })}>
