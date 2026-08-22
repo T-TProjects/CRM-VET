@@ -92,3 +92,43 @@ export async function sendTemplateToRegistrations(
 
   return { sent, skipped, registrations: updated }
 }
+
+/**
+ * Send a one-off TEST email of a template to a single address, using the
+ * event's real details but a sample attendee name. Does NOT touch any
+ * registration or log the email — it's purely a preview.
+ */
+export async function sendTestEmail(
+  eventId: string,
+  templateKey: string,
+  to: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const admin = getAdminClient()
+
+  const { data: event } = await admin.from('events').select('*').eq('id', eventId).single()
+  if (!event) return { error: 'Event not found' }
+
+  const { data: template } = await admin
+    .from('email_templates')
+    .select('*')
+    .eq('key', templateKey)
+    .single()
+  if (!template) return { error: `Template "${templateKey}" not found` }
+
+  const { data: tokens } = await admin
+    .from('gmail_tokens')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .limit(1)
+  const token = tokens?.[0] as GmailTokenRow | undefined
+  if (!token) return { error: 'No Gmail account connected. Connect one in Settings first.' }
+
+  const accessToken = await getFreshAccessToken(token, admin)
+  if (!accessToken) return { error: 'Could not refresh Gmail access' }
+
+  const sampleContact = { name: 'there', email: to } as unknown as Contact
+  const { subject, body } = renderTemplate(template as EmailTemplate, templateVars(sampleContact, event as Event))
+  const result = await sendGmail(accessToken, token.email, { to, subject: `[TEST] ${subject}`, body })
+  if (!result) return { error: 'Gmail could not send the test email' }
+  return { ok: true }
+}

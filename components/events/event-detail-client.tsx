@@ -53,6 +53,7 @@ export function EventDetailClient({
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [importOpen, setImportOpen] = useState(false)
+  const [testOpen, setTestOpen] = useState(false)
   const { toast } = useToast()
 
   const summary = useMemo(() => {
@@ -360,6 +361,9 @@ export function EventDetailClient({
         <Button variant="outline" disabled={busy || noReplyIds.length === 0} onClick={() => notify('no_reply_chase', noReplyIds)}>
           <Clock className="h-4 w-4 mr-1.5" /> Chase no-replies ({noReplyIds.length})
         </Button>
+        <Button variant="outline" onClick={() => setTestOpen(true)}>
+          <Send className="h-4 w-4 mr-1.5" /> Send test email
+        </Button>
         <Button variant="outline" disabled={regs.length === 0} onClick={exportAttendeesCSV}>
           <Download className="h-4 w-4 mr-1.5" /> Export attendee list
         </Button>
@@ -529,6 +533,9 @@ export function EventDetailClient({
         </DialogContent>
       </Dialog>
 
+      {/* Send test email dialog */}
+      {testOpen && <TestEmailDialog eventId={ev.id} onClose={() => setTestOpen(false)} />}
+
       {/* Import from form dialog */}
       {importOpen && (
         <ImportFormDialog
@@ -656,6 +663,58 @@ function EditEventDialog({
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={save} disabled={saving || !form.name.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function TestEmailDialog({ eventId, onClose }: { eventId: string; onClose: () => void }) {
+  const [to, setTo] = useState('')
+  const [templateKey, setTemplateKey] = useState('agenda')
+  const [sending, setSending] = useState(false)
+  const { toast } = useToast()
+
+  async function send() {
+    const addr = to.trim()
+    if (!addr) return
+    setSending(true)
+    const res = await fetch(`/api/events/${eventId}/test-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: addr, templateKey }),
+    })
+    const json = await res.json()
+    setSending(false)
+    if (!res.ok) { toast({ title: 'Could not send test', description: json.error, variant: 'destructive' }); return }
+    toast({ title: `Test email sent to ${addr}` })
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Send a test email</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Sends a preview to one address only — none of your attendees are emailed. The subject starts with [TEST], and the name shows as a sample (&ldquo;Hi there&rdquo;). It uses this conference&rsquo;s real documents and details, so you can check the links work.
+          </p>
+          <div className="space-y-1.5"><Label>Send to</Label><Input type="email" value={to} onChange={e => setTo(e.target.value)} placeholder="you@example.com" /></div>
+          <div className="space-y-1.5">
+            <Label>Template</Label>
+            <Select value={templateKey} onValueChange={setTemplateKey}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="agenda">Agenda / documents</SelectItem>
+                <SelectItem value="event_invite">Invitation</SelectItem>
+                <SelectItem value="no_reply_chase">No-reply chase</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={send} disabled={sending || !to.trim()}>{sending ? 'Sending…' : 'Send test'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
