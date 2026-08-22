@@ -1,5 +1,5 @@
 import { getAdminClient, getFreshAccessToken, sendGmail, type GmailTokenRow } from '@/lib/gmail'
-import { renderTemplate, templateVars } from '@/lib/templates'
+import { renderTemplate, templateVars, bodyToHtml } from '@/lib/templates'
 import type { Contact, Event, EmailTemplate, Registration } from '@/types'
 
 export interface NotifyResult {
@@ -59,7 +59,7 @@ export async function sendTemplateToRegistrations(
     if (!contact?.email) { skipped++; continue }
 
     const { subject, body } = renderTemplate(template as EmailTemplate, templateVars(contact, event as Event))
-    const result = await sendGmail(accessToken, token.email, { to: contact.email, subject, body })
+    const result = await sendGmail(accessToken, token.email, { to: contact.email, subject, body, html: bodyToHtml(body) })
     if (!result) { skipped++; continue }
 
     const patch: Record<string, unknown> = { notified_at: nowIso, updated_at: nowIso }
@@ -128,7 +128,7 @@ export async function sendTestEmail(
 
   const sampleContact = { name: 'there', email: to } as unknown as Contact
   const { subject, body } = renderTemplate(template as EmailTemplate, templateVars(sampleContact, event as Event))
-  const result = await sendGmail(accessToken, token.email, { to, subject: `[TEST] ${subject}`, body })
+  const result = await sendGmail(accessToken, token.email, { to, subject: `[TEST] ${subject}`, body, html: bodyToHtml(body) })
   if (!result) return { error: 'Gmail could not send the test email' }
   return { ok: true }
 }

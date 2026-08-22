@@ -54,19 +54,52 @@ export async function getFreshAccessToken(
 }
 
 /** Send a plain-text email via the Gmail API. Returns the Gmail thread id on success. */
+// Base64 a UTF-8 string, wrapped at 76 chars per line (MIME-friendly).
+function b64Utf8(s: string): string {
+  return Buffer.from(s, 'utf-8').toString('base64').replace(/(.{76})/g, '$1\r\n')
+}
+
+// Encode a header value as a MIME encoded-word only if it has non-ASCII chars.
+function encodeHeader(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(s)) return s
+  return `=?UTF-8?B?${Buffer.from(s, 'utf-8').toString('base64')}?=`
+}
+
 export async function sendGmail(
   accessToken: string,
   fromEmail: string,
-  opts: { to: string; subject: string; body: string }
+  opts: { to: string; subject: string; body: string; html?: string }
 ): Promise<{ threadId: string | null } | null> {
-  const headers = [
-    `From: ${fromEmail}`,
-    `To: ${opts.to}`,
-    `Subject: ${opts.subject}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'MIME-Version: 1.0',
-  ].join('\r\n')
-  const raw = `${headers}\r\n\r\n${opts.body}`
+  const subject = encodeHeader(opts.subject)
+  let raw: string
+  if (opts.html) {
+    const boundary = `bnd_${Math.random().toString(36).slice(2)}`
+    const headers = [
+      `From: ${fromEmail}`,
+      `To: ${opts.to}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ].join('\r\n')
+    raw =
+      `${headers}\r\n\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64Utf8(opts.body)}\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Type: text/html; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64Utf8(opts.html)}\r\n` +
+      `--${boundary}--`
+  } else {
+    const headers = [
+      `From: ${fromEmail}`,
+      `To: ${opts.to}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: base64',
+    ].join('\r\n')
+    raw = `${headers}\r\n\r\n${b64Utf8(opts.body)}`
+  }
   const encoded = Buffer.from(raw).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
