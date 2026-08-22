@@ -46,7 +46,11 @@ function escapeHtml(s: string): string {
 export function bodyToHtml(text: string): string {
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://crm-vet-six.vercel.app').replace(/\/+$/, '')
   const logo = `${appUrl}/tvc-logo.png`
-  const linked = escapeHtml(text).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0D3354;">$1</a>')
+  const escaped = escapeHtml(text)
+  // Bold a short "Label:" at the start of a line (e.g. Dates:, Location:,
+  // Agenda Link:) — only when a value follows the colon on the same line.
+  const bolded = escaped.replace(/^([ \t]*)([^\s:][^:\n]{0,38}):(\s+)(?=\S)/gm, '$1<strong>$2:</strong>$3')
+  const linked = bolded.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0D3354;">$1</a>')
   const withBreaks = linked.replace(/\r?\n/g, '<br>')
   return (
     `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">` +
