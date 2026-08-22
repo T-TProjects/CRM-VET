@@ -79,7 +79,13 @@ export function EventsClient({ initialEvents }: { initialEvents: EventWithCount[
                 </div>
               </CardHeader>
               <CardContent className="space-y-1.5 text-sm text-muted-foreground">
-                {e.starts_at && <p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5" /> {formatDate(e.starts_at)}</p>}
+                {e.starts_at && (
+                  <p className="flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {formatDate(e.starts_at)}
+                    {e.ends_at && e.ends_at.slice(0, 10) !== e.starts_at.slice(0, 10) ? ` – ${formatDate(e.ends_at)}` : ''}
+                  </p>
+                )}
                 {e.location && <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5" /> {e.location}</p>}
                 <p className="flex items-center gap-2"><Users className="h-3.5 w-3.5" /> {e.registrationCount} registered</p>
               </CardContent>
