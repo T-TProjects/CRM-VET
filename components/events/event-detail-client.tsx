@@ -54,7 +54,22 @@ export function EventDetailClient({
   const [bulkText, setBulkText] = useState('')
   const [importOpen, setImportOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function sendAgendaToSelected() {
+    const ids = Array.from(selectedIds).filter(id => regs.some(r => r.id === id))
+    await notify('agenda', ids)
+    setSelectedIds(new Set())
+  }
 
   const summary = useMemo(() => {
     const signedUp = regs.filter(r => r.status === 'signed_up' || r.status === 'attended').length
@@ -358,6 +373,9 @@ export function EventDetailClient({
         <Button variant="outline" disabled={busy || signedUpIds.length === 0} onClick={() => notify('agenda', signedUpIds)}>
           <FileText className="h-4 w-4 mr-1.5" /> Send agenda to signed-up ({signedUpIds.length})
         </Button>
+        <Button variant="outline" disabled={busy || selectedIds.size === 0} onClick={sendAgendaToSelected}>
+          <FileText className="h-4 w-4 mr-1.5" /> Send agenda to selected ({selectedIds.size})
+        </Button>
         <Button variant="outline" disabled={busy || noReplyIds.length === 0} onClick={() => notify('no_reply_chase', noReplyIds)}>
           <Clock className="h-4 w-4 mr-1.5" /> Chase no-replies ({noReplyIds.length})
         </Button>
@@ -394,6 +412,15 @@ export function EventDetailClient({
               ) : regs.map(r => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={() => toggleSelect(r.id)}
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                        title="Select for sending"
+                      />
+                      <div>
                     {r.contact?.name ?? 'Unknown'}
                     {r.contact?.organization && <span className="block text-xs text-muted-foreground">{r.contact.organization}</span>}
                     {(r.day1_attending || r.day2_attending || r.dinner1_attending || r.dinner2_attending) && (
@@ -404,6 +431,8 @@ export function EventDetailClient({
                         {r.dinner2_attending && <AttendTag>Dinner 2</AttendTag>}
                       </span>
                     )}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Select value={r.status} onValueChange={(v: RegistrationStatus) => updateReg(r.id, { status: v })}>
