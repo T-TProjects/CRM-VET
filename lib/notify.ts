@@ -160,6 +160,40 @@ export async function sendUpdateToRegistrations(
 }
 
 /**
+ * Send a TEST of an update email to a single address only — no attendees are
+ * emailed and nothing is logged. Uses the event's real agenda/documents but a
+ * sample attendee name, and prefixes the subject with [TEST].
+ */
+export async function sendTestUpdateEmail(
+  eventId: string,
+  note: string,
+  includeDocs: boolean,
+  to: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const admin = getAdminClient()
+
+  const { data: event } = await admin.from('events').select('*').eq('id', eventId).single()
+  if (!event) return { error: 'Event not found' }
+
+  const { data: tokens } = await admin
+    .from('gmail_tokens')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .limit(1)
+  const token = tokens?.[0] as GmailTokenRow | undefined
+  if (!token) return { error: 'No Gmail account connected. Connect one in Settings first.' }
+
+  const accessToken = await getFreshAccessToken(token, admin)
+  if (!accessToken) return { error: 'Could not refresh Gmail access' }
+
+  const sampleContact = { name: 'there', email: to } as unknown as Contact
+  const { subject, body } = buildUpdateEmail(sampleContact, event as Event, note, includeDocs)
+  const result = await sendGmail(accessToken, token.email, { to, subject: `[TEST] ${subject}`, body, html: bodyToHtml(body) })
+  if (!result) return { error: 'Gmail could not send the test email' }
+  return { ok: true }
+}
+
+/**
  * Send a one-off TEST email of a template to a single address, using the
  * event's real details but a sample attendee name. Does NOT touch any
  * registration or log the email — it's purely a preview.

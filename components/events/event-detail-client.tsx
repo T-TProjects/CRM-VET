@@ -92,6 +92,23 @@ export function EventDetailClient({
     return true
   }
 
+  // Send a preview of the update to one address only — no attendees are emailed.
+  async function sendUpdateTest(note: string, includeDocs: boolean, testTo: string) {
+    setBusy(true)
+    const res = await fetch(`/api/events/${ev.id}/update-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note, includeDocs, testTo }),
+    })
+    const json = await res.json()
+    setBusy(false)
+    if (!res.ok) {
+      toast({ title: 'Could not send test', description: json.error ?? 'Connect a Gmail account in Settings first.', variant: 'destructive' })
+      return
+    }
+    toast({ title: `Test sent to ${testTo}` })
+  }
+
   const summary = useMemo(() => {
     const signedUp = regs.filter(r => r.status === 'signed_up' || r.status === 'attended').length
     const declined = regs.filter(r => r.status === 'declined').length
@@ -592,6 +609,7 @@ export function EventDetailClient({
           busy={busy}
           onClose={() => setUpdateOpen(false)}
           onSend={sendUpdate}
+          onTest={sendUpdateTest}
         />
       )}
 
@@ -781,15 +799,17 @@ function TestEmailDialog({ eventId, onClose }: { eventId: string; onClose: () =>
 }
 
 function SendUpdateDialog({
-  recipientCount, busy, onClose, onSend,
+  recipientCount, busy, onClose, onSend, onTest,
 }: {
   recipientCount: number
   busy: boolean
   onClose: () => void
   onSend: (note: string, includeDocs: boolean) => Promise<boolean>
+  onTest: (note: string, includeDocs: boolean, testTo: string) => Promise<void>
 }) {
   const [note, setNote] = useState('')
   const [includeDocs, setIncludeDocs] = useState(true)
+  const [testTo, setTestTo] = useState('')
 
   async function send() {
     if (!note.trim()) return
@@ -819,6 +839,24 @@ function SendUpdateDialog({
             <input type="checkbox" checked={includeDocs} onChange={e => setIncludeDocs(e.target.checked)} className="h-4 w-4" />
             Include the agenda &amp; event documents as a reminder
           </label>
+
+          {/* Test to yourself first */}
+          <div className="space-y-1.5 border-t pt-3">
+            <Label>Send a test to yourself first (optional)</Label>
+            <div className="flex gap-2">
+              <Input type="email" value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="you@example.com" />
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                disabled={busy || !note.trim() || !testTo.trim()}
+                onClick={() => onTest(note.trim(), includeDocs, testTo.trim())}
+              >
+                Send test
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Sends only to this address so you can check it. No attendees are emailed.</p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
