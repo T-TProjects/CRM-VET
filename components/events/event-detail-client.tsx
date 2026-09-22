@@ -54,6 +54,7 @@ export function EventDetailClient({
   const [bulkText, setBulkText] = useState('')
   const [importOpen, setImportOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
+  const [updateOpen, setUpdateOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
@@ -69,6 +70,26 @@ export function EventDetailClient({
     const ids = Array.from(selectedIds).filter(id => regs.some(r => r.id === id))
     await notify('agenda', ids)
     setSelectedIds(new Set())
+  }
+
+  // Send a last-minute update/notes email to the signed-up attendees.
+  async function sendUpdate(note: string, includeDocs: boolean): Promise<boolean> {
+    const ids = regs.filter(r => r.status === 'signed_up').map(r => r.id)
+    if (ids.length === 0) { toast({ title: 'No signed-up attendees to update yet' }); return false }
+    setBusy(true)
+    const res = await fetch(`/api/events/${ev.id}/update-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note, includeDocs, registrationIds: ids }),
+    })
+    const json = await res.json()
+    setBusy(false)
+    if (!res.ok) {
+      toast({ title: 'Could not send', description: json.error ?? 'Connect a Gmail account in Settings first.', variant: 'destructive' })
+      return false
+    }
+    toast({ title: `Update sent to ${json.sent ?? ids.length} attendee(s)` })
+    return true
   }
 
   const summary = useMemo(() => {
@@ -289,7 +310,6 @@ export function EventDetailClient({
   }
 
   const keyContact = allContacts.find(c => c.id === ev.key_contact_id) ?? null
-  const invitedIds = regs.filter(r => r.status === 'invited').map(r => r.id)
   const signedUpIds = regs.filter(r => r.status === 'signed_up').map(r => r.id)
   const noReplyIds = regs.filter(r => r.notified_at && !r.replied_at).map(r => r.id)
 
@@ -367,8 +387,8 @@ export function EventDetailClient({
         <Button onClick={() => { setAttendeeSearch(''); setAddOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add attendee</Button>
         <Button variant="outline" onClick={() => { setBulkText(''); setBulkOpen(true) }}><Plus className="h-4 w-4 mr-1.5" /> Add multiple</Button>
         <Button variant="outline" onClick={() => setImportOpen(true)}><FileSpreadsheet className="h-4 w-4 mr-1.5" /> Import from form</Button>
-        <Button variant="outline" disabled={busy || invitedIds.length === 0} onClick={() => notify('event_invite', invitedIds)}>
-          <Send className="h-4 w-4 mr-1.5" /> Send invite to no-response ({invitedIds.length})
+        <Button variant="outline" disabled={busy || signedUpIds.length === 0} onClick={() => setUpdateOpen(true)}>
+          <Send className="h-4 w-4 mr-1.5" /> Send an update ({signedUpIds.length})
         </Button>
         <Button variant="outline" disabled={busy || signedUpIds.length === 0} onClick={() => notify('agenda', signedUpIds)}>
           <FileText className="h-4 w-4 mr-1.5" /> Send agenda to signed-up ({signedUpIds.length})
@@ -565,6 +585,16 @@ export function EventDetailClient({
       {/* Send test email dialog */}
       {testOpen && <TestEmailDialog eventId={ev.id} onClose={() => setTestOpen(false)} />}
 
+      {/* Send an update dialog */}
+      {updateOpen && (
+        <SendUpdateDialog
+          recipientCount={signedUpIds.length}
+          busy={busy}
+          onClose={() => setUpdateOpen(false)}
+          onSend={sendUpdate}
+        />
+      )}
+
       {/* Import from form dialog */}
       {importOpen && (
         <ImportFormDialog
@@ -744,6 +774,57 @@ function TestEmailDialog({ eventId, onClose }: { eventId: string; onClose: () =>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={send} disabled={sending || !to.trim()}>{sending ? 'Sending…' : 'Send test'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function SendUpdateDialog({
+  recipientCount, busy, onClose, onSend,
+}: {
+  recipientCount: number
+  busy: boolean
+  onClose: () => void
+  onSend: (note: string, includeDocs: boolean) => Promise<boolean>
+}) {
+  const [note, setNote] = useState('')
+  const [includeDocs, setIncludeDocs] = useState(true)
+
+  async function send() {
+    if (!note.trim()) return
+    const ok = await onSend(note.trim(), includeDocs)
+    if (ok) onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Send an update</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Emails your {recipientCount} signed-up attendee{recipientCount === 1 ? '' : 's'} with a last-minute change or note. Type your message below.
+          </p>
+          <div className="space-y-1.5">
+            <Label>Your message</Label>
+            <textarea
+              autoFocus
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="e.g. The start time has moved to 9:30am, and dinner is now at The Grand."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[140px]"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={includeDocs} onChange={e => setIncludeDocs(e.target.checked)} className="h-4 w-4" />
+            Include the agenda &amp; event documents as a reminder
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={send} disabled={busy || !note.trim() || recipientCount === 0}>
+            {busy ? 'Sending…' : `Send to ${recipientCount}`}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

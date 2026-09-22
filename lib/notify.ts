@@ -1,5 +1,5 @@
 import { getAdminClient, getFreshAccessToken, sendGmail, type GmailTokenRow } from '@/lib/gmail'
-import { renderTemplate, templateVars, bodyToHtml } from '@/lib/templates'
+import { renderTemplate, templateVars, bodyToHtml, buildUpdateEmail } from '@/lib/templates'
 import type { Contact, Event, EmailTemplate, Registration } from '@/types'
 
 export interface NotifyResult {
@@ -91,6 +91,72 @@ export async function sendTemplateToRegistrations(
   }
 
   return { sent, skipped, registrations: updated }
+}
+
+/**
+ * Send a one-off "update / last-minute notes" email to a set of registrations.
+ * Uses the coordinator's typed note plus an optional agenda/documents reminder.
+ * Logs each sent email so replies thread, but does NOT change notified/reply
+ * status — an update isn't an invitation.
+ */
+export async function sendUpdateToRegistrations(
+  eventId: string,
+  note: string,
+  includeDocs: boolean,
+  registrationIds: string[]
+): Promise<NotifyResult> {
+  const admin = getAdminClient()
+
+  const { data: event } = await admin.from('events').select('*').eq('id', eventId).single()
+  if (!event) return { sent: 0, skipped: 0, registrations: [], error: 'Event not found' }
+
+  const { data: tokens } = await admin
+    .from('gmail_tokens')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .limit(1)
+  const token = tokens?.[0] as GmailTokenRow | undefined
+  if (!token) return { sent: 0, skipped: 0, registrations: [], error: 'No Gmail account connected' }
+
+  const accessToken = await getFreshAccessToken(token, admin)
+  if (!accessToken) return { sent: 0, skipped: 0, registrations: [], error: 'Could not refresh Gmail access' }
+
+  const { data: regs } = await admin
+    .from('registrations')
+    .select('*, contact:contacts(*)')
+    .eq('event_id', eventId)
+    .in('id', registrationIds)
+
+  const nowIso = new Date().toISOString()
+  let sent = 0
+  let skipped = 0
+
+  for (const reg of (regs ?? []) as Registration[]) {
+    const contact = reg.contact as Contact | undefined
+    if (!contact?.email) { skipped++; continue }
+
+    const { subject, body } = buildUpdateEmail(contact, event as Event, note, includeDocs)
+    const result = await sendGmail(accessToken, token.email, { to: contact.email, subject, body, html: bodyToHtml(body) })
+    if (!result) { skipped++; continue }
+
+    // Log the sent email so the sync can match replies by thread.
+    await admin.from('emails').insert({
+      thread_id: result.threadId,
+      from_email: token.email,
+      from_name: 'Tonia CRM',
+      subject,
+      body_text: body,
+      received_at: nowIso,
+      is_read: true,
+      contact_id: contact.id,
+      event_id: eventId,
+      registration_id: reg.id,
+    })
+
+    sent++
+  }
+
+  return { sent, skipped, registrations: [] }
 }
 
 /**

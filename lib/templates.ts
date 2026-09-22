@@ -35,6 +35,33 @@ export function renderTemplate(tpl: EmailTemplate, vars: Record<string, string>)
   return { subject: render(tpl.subject, vars), body: render(tpl.body, vars) }
 }
 
+/**
+ * Build a one-off "update / last-minute notes" email: the coordinator's typed
+ * note, optionally followed by a reminder of the agenda and event documents.
+ * Not stored as a template — the note changes every time.
+ */
+export function buildUpdateEmail(
+  contact: Contact,
+  event: Event,
+  note: string,
+  includeDocs: boolean
+): { subject: string; body: string } {
+  const vars = templateVars(contact, event)
+  const lines: string[] = [`Hi ${vars.contact_name || 'there'},`, '', note.trim()]
+
+  if (includeDocs) {
+    const reminder: string[] = []
+    if (vars.agenda_url) reminder.push(`Agenda: ${vars.agenda_url}`)
+    if (vars.documents) reminder.push(vars.documents)
+    if (reminder.length) {
+      lines.push('', `As a reminder, here are the details for ${vars.event_name}:`, '', ...reminder)
+    }
+  }
+
+  lines.push('', 'Thanks,', 'Tonia')
+  return { subject: `Update: ${vars.event_name}`, body: lines.join('\n') }
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
