@@ -80,7 +80,7 @@ export function SettingsClient({
         <CardHeader>
           <CardTitle className="text-base">Email templates</CardTitle>
           <CardDescription>
-            Used for automated sends. Placeholders: {'{{contact_name}}'}, {'{{event_name}}'}, {'{{event_date}}'}, {'{{event_location}}'}, {'{{agenda_url}}'}.
+            Used for automated sends. Placeholders: {'{{contact_name}}'}, {'{{event_name}}'}, {'{{event_date}}'}, {'{{event_location}}'}, {'{{agenda_url}}'}, {'{{documents}}'}.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

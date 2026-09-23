@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/gmail'
+import { getOrCreateUpdateTemplate } from '@/lib/notify'
 import { SettingsClient } from '@/components/settings/settings-client'
 import type { EmailTemplate } from '@/types'
 
@@ -10,6 +11,9 @@ export default async function SettingsPage() {
   // Raw service-role client (no cookies) — gmail_tokens has no authenticated
   // RLS policy, so a user-scoped client returns nothing.
   const admin = getAdminClient()
+
+  // Make sure the editable "Event update" template exists before listing.
+  await getOrCreateUpdateTemplate()
 
   const [{ data: templates }, { data: tokens }] = await Promise.all([
     supabase.from('email_templates').select('*').order('name'),

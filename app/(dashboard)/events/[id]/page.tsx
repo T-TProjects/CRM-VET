@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getOrCreateUpdateTemplate } from '@/lib/notify'
 import { EventDetailClient } from '@/components/events/event-detail-client'
 import type { Event, Registration, Contact, RunSheetItem, BudgetItem } from '@/types'
 
@@ -32,6 +33,9 @@ export default async function EventDetailPage({ params }: { params: { id: string
       .order('created_at', { ascending: true }),
   ])
 
+  // The editable "Event update" template (created on first use).
+  const updateTemplate = await getOrCreateUpdateTemplate()
+
   return (
     <EventDetailClient
       event={event as Event}
@@ -39,6 +43,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
       allContacts={(contacts ?? []) as Contact[]}
       initialRunSheet={(runSheet ?? []) as RunSheetItem[]}
       initialBudget={(budget ?? []) as BudgetItem[]}
+      updateTemplate={{ subject: updateTemplate.subject, body: updateTemplate.body }}
     />
   )
 }

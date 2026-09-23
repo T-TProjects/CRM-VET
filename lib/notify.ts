@@ -1,6 +1,28 @@
 import { getAdminClient, getFreshAccessToken, sendGmail, type GmailTokenRow } from '@/lib/gmail'
-import { renderTemplate, templateVars, bodyToHtml, buildUpdateEmail } from '@/lib/templates'
+import { renderTemplate, templateVars, bodyToHtml, renderUpdateEmail, UPDATE_TEMPLATE_DEFAULT } from '@/lib/templates'
 import type { Contact, Event, EmailTemplate, Registration } from '@/types'
+
+/**
+ * Return the editable "Event update" template, creating it with sensible
+ * defaults the first time (so it also appears in Settings). Uses the admin
+ * client so it works regardless of who is signed in.
+ */
+export async function getOrCreateUpdateTemplate(): Promise<EmailTemplate> {
+  const admin = getAdminClient()
+  const { data: existing } = await admin
+    .from('email_templates')
+    .select('*')
+    .eq('key', UPDATE_TEMPLATE_DEFAULT.key)
+    .maybeSingle()
+  if (existing) return existing as EmailTemplate
+
+  const { data: created } = await admin
+    .from('email_templates')
+    .insert(UPDATE_TEMPLATE_DEFAULT)
+    .select('*')
+    .single()
+  return created as EmailTemplate
+}
 
 export interface NotifyResult {
   sent: number
@@ -101,7 +123,8 @@ export async function sendTemplateToRegistrations(
  */
 export async function sendUpdateToRegistrations(
   eventId: string,
-  note: string,
+  subjectTpl: string,
+  bodyTpl: string,
   includeDocs: boolean,
   registrationIds: string[]
 ): Promise<NotifyResult> {
@@ -135,7 +158,7 @@ export async function sendUpdateToRegistrations(
     const contact = reg.contact as Contact | undefined
     if (!contact?.email) { skipped++; continue }
 
-    const { subject, body } = buildUpdateEmail(contact, event as Event, note, includeDocs)
+    const { subject, body } = renderUpdateEmail(contact, event as Event, subjectTpl, bodyTpl, includeDocs)
     const result = await sendGmail(accessToken, token.email, { to: contact.email, subject, body, html: bodyToHtml(body) })
     if (!result) { skipped++; continue }
 
@@ -166,7 +189,8 @@ export async function sendUpdateToRegistrations(
  */
 export async function sendTestUpdateEmail(
   eventId: string,
-  note: string,
+  subjectTpl: string,
+  bodyTpl: string,
   includeDocs: boolean,
   to: string
 ): Promise<{ ok?: boolean; error?: string }> {
@@ -187,7 +211,7 @@ export async function sendTestUpdateEmail(
   if (!accessToken) return { error: 'Could not refresh Gmail access' }
 
   const sampleContact = { name: 'there', email: to } as unknown as Contact
-  const { subject, body } = buildUpdateEmail(sampleContact, event as Event, note, includeDocs)
+  const { subject, body } = renderUpdateEmail(sampleContact, event as Event, subjectTpl, bodyTpl, includeDocs)
   const result = await sendGmail(accessToken, token.email, { to, subject: `[TEST] ${subject}`, body, html: bodyToHtml(body) })
   if (!result) return { error: 'Gmail could not send the test email' }
   return { ok: true }
