@@ -1,11 +1,13 @@
 import { getAdminClient, getFreshAccessToken, sendGmail, type GmailTokenRow } from '@/lib/gmail'
-import { renderTemplate, templateVars, bodyToHtml, renderUpdateEmail, UPDATE_TEMPLATE_DEFAULT } from '@/lib/templates'
+import { renderTemplate, templateVars, bodyToHtml, renderUpdateEmail, UPDATE_TEMPLATE_DEFAULT, UPDATE_TEMPLATE_PRIOR_BODIES } from '@/lib/templates'
 import type { Contact, Event, EmailTemplate, Registration } from '@/types'
 
 /**
  * Return the editable "Event update" template, creating it with sensible
- * defaults the first time (so it also appears in Settings). Uses the admin
- * client so it works regardless of who is signed in.
+ * defaults the first time (so it also appears in Settings). If an existing row
+ * still holds an earlier built-in default (i.e. it was never customised), it is
+ * upgraded to the current default — real edits are left untouched. Uses the
+ * admin client so it works regardless of who is signed in.
  */
 export async function getOrCreateUpdateTemplate(): Promise<EmailTemplate> {
   const admin = getAdminClient()
@@ -14,7 +16,24 @@ export async function getOrCreateUpdateTemplate(): Promise<EmailTemplate> {
     .select('*')
     .eq('key', UPDATE_TEMPLATE_DEFAULT.key)
     .maybeSingle()
-  if (existing) return existing as EmailTemplate
+
+  if (existing) {
+    const row = existing as EmailTemplate
+    if (UPDATE_TEMPLATE_PRIOR_BODIES.includes(row.body)) {
+      const { data: upgraded } = await admin
+        .from('email_templates')
+        .update({
+          subject: UPDATE_TEMPLATE_DEFAULT.subject,
+          body: UPDATE_TEMPLATE_DEFAULT.body,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id)
+        .select('*')
+        .single()
+      return (upgraded ?? row) as EmailTemplate
+    }
+    return row
+  }
 
   const { data: created } = await admin
     .from('email_templates')

@@ -39,12 +39,28 @@ export function renderTemplate(tpl: EmailTemplate, vars: Record<string, string>)
 export const UPDATE_TEMPLATE_DEFAULT = {
   key: 'event_update',
   name: 'Event update',
-  subject: 'Update: {{event_name}}',
+  subject: 'Thank you for attending {{event_name}}',
   body:
     'Hi {{contact_name}},\n\n' +
-    '[Type your update here — for example a change to the start time or the dinner venue.]\n\n' +
+    'Thank you for taking the time to attend {{event_name}}.\n\n' +
+    "One of the most valuable parts of our SIGs is being able to take what you've learned back to your clinic and share the outcomes and learnings with your team. To do that, it really helps to have the resources from those who presented.\n\n" +
+    "The Vet Company keeps these resources on our website, so they're available to every team across our group.\n\n" +
+    'To access them:\n' +
+    'Go to our website: https://thevetcompany.nz\n' +
+    'Select "Members Area"\n' +
+    'Enter the password: \n\n' +
+    "I'll keep this updated as I receive more resources from the suppliers.\n\n" +
     'Thanks,\nTonia',
 }
+
+/**
+ * Bodies used by earlier versions of the update template. A saved row still
+ * holding one of these is considered untouched, so it's safe to upgrade to the
+ * current default without clobbering a user's own edits.
+ */
+export const UPDATE_TEMPLATE_PRIOR_BODIES = [
+  'Hi {{contact_name}},\n\n[Type your update here — for example a change to the start time or the dinner venue.]\n\nThanks,\nTonia',
+]
 
 /**
  * Render the "Event update" email for one recipient from an editable subject/body
