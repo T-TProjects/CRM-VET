@@ -90,10 +90,15 @@ export function parseFormSpreadsheet(text: string, dateOrder?: DateOrder): Parse
     return idx
   }
   const col = {
-    name: findLast(h => /attendee|full name/.test(h)),
+    // Match the attendee name, but never the "attendee email address" column.
+    name: findLast(h => (/attendee|full name/.test(h) || h === 'name') && !/email/.test(h)),
     email: findLast(h => /email/.test(h)),
     clinic: findLast(h => /clinic/.test(h)),
+    // Older forms: one "which days will you attend" question.
     days: findLast(h => /which day|days will/.test(h)),
+    // Newer forms: separate "Will you attend Day 1 / Day 2?" yes-no questions.
+    day1: findLast(h => /day\s*1/.test(h)),
+    day2: findLast(h => /day\s*2/.test(h)),
     dinner: findLast(h => /dinner/.test(h)),
     dietary: findLast(h => /dietary/.test(h)),
     checkin: findLast(h => /check.?in/.test(h)),
@@ -112,7 +117,7 @@ export function parseFormSpreadsheet(text: string, dateOrder?: DateOrder): Parse
   const missingColumns: string[] = []
   if (col.email === -1) missingColumns.push('Email')
   if (col.clinic === -1) missingColumns.push('Clinic')
-  if (col.days === -1) missingColumns.push('Days attending')
+  if (col.days === -1 && col.day1 === -1 && col.day2 === -1) missingColumns.push('Days attending')
 
   const get = (cells: string[], i: number) => (i >= 0 && i < cells.length ? cells[i].trim() : '')
 
@@ -147,13 +152,20 @@ export function parseFormSpreadsheet(text: string, dateOrder?: DateOrder): Parse
     const dinner = get(cells, col.dinner).toLowerCase()
     const accomAns = get(cells, col.accom).toLowerCase()
     const rawEmail = get(cells, col.email)
+    // Newer forms ask Day 1 / Day 2 separately (Yes/No); older ones use a single
+    // "which days" question. Use the separate columns only when there are two
+    // distinct ones and no single "which days" column.
+    const splitDays = col.days === -1 && col.day1 >= 0 && col.day2 >= 0 && col.day1 !== col.day2
+    const isYes = (s: string) => /\byes\b/.test(s)
+    const day1 = splitDays ? isYes(get(cells, col.day1).toLowerCase()) : (/both/.test(days) || /day\s*1/.test(days))
+    const day2 = splitDays ? isYes(get(cells, col.day2).toLowerCase()) : (/both/.test(days) || /day\s*2/.test(days))
     people.push({
       name,
       email: rawEmail && rawEmail.includes('@') ? rawEmail : null,
       clinic: get(cells, col.clinic) || null,
       dietary: get(cells, col.dietary) || null,
-      day1: /both/.test(days) || /day\s*1/.test(days),
-      day2: /both/.test(days) || /day\s*2/.test(days),
+      day1,
+      day2,
       dinner1: /both/.test(dinner) || /night\s*1|dinner\s*1/.test(dinner) || /^y(es)?\b/.test(dinner),
       dinner2: /both/.test(dinner) || /night\s*2|dinner\s*2/.test(dinner),
       accommodation_needed: /^y(es)?\b/.test(accomAns),
